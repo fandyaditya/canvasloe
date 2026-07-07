@@ -2,12 +2,16 @@
 
 A local-first moodboard canvas for quickly arranging visual ideas — images, text, shapes, color palettes, markdown notes, and frames. No accounts, no backend, no cloud sync. Everything stays in your browser.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/fandyaw/canvasloe)
+
+Live: [canvasloe.pages.dev](https://canvasloe.pages.dev)
+
 ## Features
 
 - **Projects & canvases** — organize boards in a left sidebar; switch instantly
 - **Canvas elements** — text, images, rectangles, circles, arrows, color palettes, markdown cards, frames
 - **Frames** — group elements in a grid layout with optional title; export frame as PNG
-- **Drag & drop** — drop images onto the canvas
+- **Drag & drop** — drop images and `.md` files onto the canvas
 - **Autosave** — edits persist automatically to IndexedDB + OPFS
 - **Undo / redo** — per canvas
 - **Copy / paste** — multi-select, frames, and cross-canvas paste (`Ctrl+C` / `Ctrl+V`)
@@ -30,8 +34,28 @@ Open the URL shown in the terminal (usually `http://localhost:5173`).
 npm run build        # Production build
 npm run preview      # Preview production build
 npm run lint         # Run oxlint
-npm run dev:persist  # Dev server with a persistent browser profile
 ```
+
+## Deploy to Cloudflare Pages
+
+**One-click** — click the button at the top of this README (requires a public GitHub repo). On the setup screen, use:
+
+| Setting | Value |
+|---------|-------|
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+
+**Git integration** — [Connect the repo in the dashboard](https://dash.cloudflare.com/?to=/:account/pages/new) with the same build settings above. Pushes to `main` deploy to production.
+
+**Wrangler (CLI)** — for direct uploads from your machine:
+
+```bash
+npm install
+source .cf-auth   # exports CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN
+npm run deploy
+```
+
+Project name: `canvasloe` → **canvasloe.pages.dev**
 
 ## Keyboard Shortcuts
 
@@ -40,7 +64,7 @@ npm run dev:persist  # Dev server with a persistent browser profile
 | `Ctrl/Cmd + Z` | Undo |
 | `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y` | Redo |
 | `Ctrl/Cmd + C` | Copy selection |
-| `Ctrl/Cmd + V` | Paste (elements or image from clipboard) |
+| `Ctrl/Cmd + V` | Paste (elements, images, markdown, or text from clipboard) |
 | `Ctrl/Cmd + D` | Duplicate selection |
 | `Ctrl/Cmd + +` | Zoom in |
 | `Ctrl/Cmd + -` | Zoom out |
@@ -68,7 +92,7 @@ React 19 · TypeScript · Vite · Konva · Zustand · Dexie · Tailwind CSS · R
 
 ## Project Docs
 
-- [`prd.md`](./prd.md) — product requirements
+- [`docs/prd.md`](./docs/prd.md) — product requirements
 - [`AGENTS.md`](./AGENTS.md) — architecture and conventions for contributors / AI agents
 
 ## Browser Support

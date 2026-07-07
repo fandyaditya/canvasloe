@@ -2,7 +2,7 @@
 
 Local-first moodboard canvas web app. Users create projects and canvases, arrange images/text/shapes/frames on an infinite canvas, and everything persists in the browser.
 
-Read `prd.md` for product requirements. This file is for implementation context.
+Read `docs/prd.md` for product requirements. This file is for implementation context.
 
 ## Commands
 
@@ -10,7 +10,6 @@ Read `prd.md` for product requirements. This file is for implementation context.
 npm run dev          # Vite dev server
 npm run build        # tsc -b && vite build
 npm run lint         # oxlint
-npm run dev:persist  # dev with persistent browser profile (see scripts/)
 ```
 
 Always run `npm run build` after non-trivial changes.

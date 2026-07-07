@@ -5,10 +5,8 @@ import {
   ChevronRight,
   Folder,
   HardDrive,
-  LayoutGrid,
   PanelLeft,
   Plus,
-  Settings,
   Trash2,
 } from 'lucide-react'
 import { db } from '../db/db'
@@ -146,9 +144,7 @@ export function LeftSidebar() {
     <aside className="flex h-full w-[260px] shrink-0 flex-col bg-white">
       <div className="flex items-center justify-between border-b border-panel-border px-4 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <LayoutGrid className="h-4 w-4 text-white" />
-          </div>
+          <img src="/icon.png" alt="" className="h-8 w-8 shrink-0 rounded-lg object-contain" width={32} height={32} />
           <span className="text-base font-semibold">Moodboard</span>
         </div>
         <button
@@ -242,13 +238,6 @@ export function LeftSidebar() {
         >
           ...
         </button> */}
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-text-secondary hover:bg-gray-50"
-        >
-          <Settings className="h-4 w-4" />
-          Settings
-        </button>
       </div>
     </aside>
   )

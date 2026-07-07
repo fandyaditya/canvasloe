@@ -31,17 +31,6 @@ export function EditorShell() {
     }
   }, [loadCanvas])
 
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      const { activeCanvas, elements } = useEditorStore.getState()
-      if (activeCanvas) {
-        localStorage.setItem(`pending-save-${activeCanvas.id}`, JSON.stringify(elements))
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [])
-
   return (
     <div className="flex h-full flex-col">
       <TopBar />

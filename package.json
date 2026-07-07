@@ -5,12 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:persist": "bash scripts/dev-persist.sh",
-    "dev:start": "bash scripts/dev-start.sh",
-    "dev:stop": "bash scripts/dev-stop.sh",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=canvasloe --branch=main"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -41,6 +39,7 @@
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.1.18",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "wrangler": "^4.107.0"
   }
 }
