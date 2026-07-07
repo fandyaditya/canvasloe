@@ -22,21 +22,24 @@ export function AnimatedSidebarSlot({ side, open, width, children }: AnimatedSid
       style={{ width: open ? width : RAIL_WIDTH }}
     >
       <div
-        className={`absolute top-0 h-full transition-transform ease-out ${DURATION} ${
+        className={`absolute top-0 h-full transition-opacity ease-out ${DURATION} ${
           isLeft ? 'left-0' : 'right-0'
-        } ${open ? 'translate-x-0' : isLeft ? '-translate-x-full' : 'translate-x-full'}`}
+        } ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
         style={{ width }}
         aria-hidden={!open}
       >
         {children}
       </div>
-      <div
-        className={`absolute top-0 h-full w-10 transition-opacity ease-out ${DURATION} ${
-          isLeft ? 'right-0' : 'left-0'
-        } ${open ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
-      >
-        <SidebarRail side={side} />
-      </div>
+
+      {!open && (
+        <div
+          className={`absolute top-0 z-10 h-full w-10 ${
+            isLeft ? 'right-0' : 'left-0'
+          }`}
+        >
+          <SidebarRail side={side} />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Frame, GripVertical, ImageIcon, Type, Square, FileText, Droplet, X, Download } from 'lucide-react'
-import { InspectorHeader, SectionLabel, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, ElementActions } from './shared'
 import type { CanvasElement, FrameElement } from '../../db/schema'
 import { FRAME_MAX_CHILDREN } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
@@ -46,7 +46,7 @@ function ChildIcon({ type }: { type: CanvasElement['type'] }) {
   }
 }
 
-export function FrameInspector({ element }: { element: FrameElement }) {
+export function FrameInspector({ element, onClose }: { element: FrameElement; onClose?: () => void }) {
   const elements = useEditorStore((s) => s.elements)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
   const setElements = useEditorStore((s) => s.setElements)
@@ -109,8 +109,7 @@ export function FrameInspector({ element }: { element: FrameElement }) {
   }
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={Frame} label="Frame" />
+    <InspectorShell icon={Frame} label="Frame" onClose={onClose}>
 
       <div className="space-y-4">
         <div>
@@ -281,6 +280,6 @@ export function FrameInspector({ element }: { element: FrameElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

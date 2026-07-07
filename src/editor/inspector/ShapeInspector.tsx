@@ -1,12 +1,12 @@
 import { Square } from 'lucide-react'
-import { InspectorHeader, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
 import type { ShapeElement } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
 import { useHistoryStore } from '../state/historyStore'
 import { duplicateElement, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
 
-export function ShapeInspector({ element }: { element: ShapeElement }) {
+export function ShapeInspector({ element, onClose }: { element: ShapeElement; onClose?: () => void }) {
   const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
   const elements = useEditorStore((s) => s.elements)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
@@ -23,8 +23,7 @@ export function ShapeInspector({ element }: { element: ShapeElement }) {
   }
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={Square} label="Shape" />
+    <InspectorShell icon={Square} label="Shape" onClose={onClose}>
 
       <div className="space-y-4">
         <div>
@@ -99,6 +98,6 @@ export function ShapeInspector({ element }: { element: ShapeElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

@@ -1,4 +1,4 @@
-import { PanelLeftOpen, PanelRightOpen } from 'lucide-react'
+import { PanelLeft, PanelRight } from 'lucide-react'
 import { useEditorStore } from './state/editorStore'
 
 export function SidebarRail({ side }: { side: 'left' | 'right' }) {
@@ -6,7 +6,7 @@ export function SidebarRail({ side }: { side: 'left' | 'right' }) {
   const setRightSidebarOpen = useEditorStore((s) => s.setRightSidebarOpen)
 
   const isLeft = side === 'left'
-  const Icon = isLeft ? PanelLeftOpen : PanelRightOpen
+  const Icon = isLeft ? PanelLeft : PanelRight
   const label = isLeft ? 'Show projects' : 'Show inspector'
 
   return (

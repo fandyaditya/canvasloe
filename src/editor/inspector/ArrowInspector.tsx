@@ -1,12 +1,12 @@
 import { ArrowUpRight } from 'lucide-react'
-import { InspectorHeader, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
 import type { ArrowElement } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
 import { useHistoryStore } from '../state/historyStore'
 import { duplicateElement, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
 
-export function ArrowInspector({ element }: { element: ArrowElement }) {
+export function ArrowInspector({ element, onClose }: { element: ArrowElement; onClose?: () => void }) {
   const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
   const elements = useEditorStore((s) => s.elements)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
@@ -38,8 +38,7 @@ export function ArrowInspector({ element }: { element: ArrowElement }) {
   )
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={ArrowUpRight} label="Arrow" />
+    <InspectorShell icon={ArrowUpRight} label="Arrow" onClose={onClose}>
 
       <div className="space-y-4">
         <div>
@@ -112,6 +111,6 @@ export function ArrowInspector({ element }: { element: ArrowElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

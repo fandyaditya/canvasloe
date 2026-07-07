@@ -119,46 +119,75 @@ export function CanvasShapeElement({
     e.cancelBubble = true
     onSelect(e.evt instanceof MouseEvent && (e.evt.ctrlKey || e.evt.metaKey))
   }
-  const common = {
+
+  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (element.shape === 'circle') {
+      const radius = element.width / 2
+      onChange({ x: e.target.x() - radius, y: e.target.y() - radius })
+      return
+    }
+    onChange({ x: e.target.x(), y: e.target.y() })
+  }
+
+  const handleTransformEnd = () => {
+    const node = shapeRef.current
+    if (!node) return
+
+    if (element.shape === 'circle') {
+      const circle = node as Konva.Circle
+      const scaleX = circle.scaleX()
+      const newRadius = Math.max(2.5, circle.radius() * scaleX)
+      onChange({
+        x: circle.x() - newRadius,
+        y: circle.y() - newRadius,
+        width: newRadius * 2,
+        height: newRadius * 2,
+        rotation: circle.rotation(),
+      })
+      circle.scaleX(1)
+      circle.scaleY(1)
+      return
+    }
+
+    const rect = node as Konva.Rect
+    const scaleX = rect.scaleX()
+    const scaleY = rect.scaleY()
+    onChange({
+      x: rect.x(),
+      y: rect.y(),
+      width: Math.max(5, rect.width() * scaleX),
+      height: Math.max(5, rect.height() * scaleY),
+      rotation: rect.rotation(),
+    })
+    rect.scaleX(1)
+    rect.scaleY(1)
+  }
+
+  const shared = {
     id: element.id,
-    x: element.x,
-    y: element.y,
     opacity: element.opacity,
     rotation: element.rotation,
     draggable: !element.locked,
     onClick: handleSelect,
     onTap: handleSelect,
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onChange({ x: e.target.x(), y: e.target.y() }),
-    onTransformEnd: () => {
-      const node = shapeRef.current
-      if (!node) return
-      const scaleX = node.scaleX()
-      const scaleY = node.scaleY()
-      onChange({
-        x: node.x(),
-        y: node.y(),
-        width: Math.max(5, node.width() * scaleX),
-        height: Math.max(5, node.height() * scaleY),
-        rotation: node.rotation(),
-      })
-      node.scaleX(1)
-      node.scaleY(1)
-    },
+    onDragEnd: handleDragEnd,
+    onTransformEnd: handleTransformEnd,
+    fill: element.fill,
+    fillOpacity: element.fillOpacity,
+    stroke: element.stroke,
+    strokeWidth: element.strokeWidth,
+    strokeOpacity: element.strokeOpacity,
   }
 
   if (element.shape === 'circle') {
+    const radius = element.width / 2
     return (
       <Circle
         ref={shapeRef as React.RefObject<Konva.Circle>}
-        {...common}
-        x={element.x + element.width / 2}
-        y={element.y + element.height / 2}
-        radius={element.width / 2}
-        fill={element.fill}
-        fillOpacity={element.fillOpacity}
-        stroke={element.stroke}
-        strokeWidth={element.strokeWidth}
-        strokeOpacity={element.strokeOpacity}
+        {...shared}
+        x={element.x + radius}
+        y={element.y + radius}
+        radius={radius}
       />
     )
   }
@@ -166,14 +195,11 @@ export function CanvasShapeElement({
   return (
     <Rect
       ref={shapeRef as React.RefObject<Konva.Rect>}
-      {...common}
+      {...shared}
+      x={element.x}
+      y={element.y}
       width={element.width}
       height={element.height}
-      fill={element.fill}
-      fillOpacity={element.fillOpacity}
-      stroke={element.stroke}
-      strokeWidth={element.strokeWidth}
-      strokeOpacity={element.strokeOpacity}
       cornerRadius={element.radius ?? 0}
     />
   )
@@ -189,45 +215,51 @@ export function CanvasArrowElement({
   onSelect: (multi?: boolean) => void
   onChange: (updates: Partial<ArrowElement>) => void
 }) {
+  const groupRef = useRef<Konva.Group>(null)
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true
     onSelect(e.evt instanceof MouseEvent && (e.evt.ctrlKey || e.evt.metaKey))
   }
-  const pts = [
-    element.x + (element.points[0] ?? 0),
-    element.y + (element.points[1] ?? 0),
-    element.x + (element.points[2] ?? element.width),
-    element.y + (element.points[3] ?? element.height),
-  ]
 
-  const common = {
-    id: element.id,
-    points: pts,
+  const points =
+    element.points.length >= 4
+      ? element.points
+      : [0, 0, element.width, element.height]
+
+  const lineProps = {
+    points,
     stroke: element.stroke,
     strokeWidth: element.strokeWidth,
     hitStrokeWidth: ARROW_HIT_STROKE_WIDTH,
     opacity: element.opacity * element.strokeOpacity,
     dash: element.dashed ? [8, 4] : undefined,
-    draggable: !element.locked,
-    onClick: handleSelect,
-    onTap: handleSelect,
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onChange({ x: e.target.x(), y: e.target.y() }),
   }
 
-  if (element.endHead || element.startHead) {
-    return (
-      <Arrow
-        {...common}
-        fill={element.stroke}
-        pointerLength={10}
-        pointerWidth={10}
-        pointerAtBeginning={element.startHead}
-        pointerAtEnding={element.endHead}
-      />
-    )
-  }
-
-  return <Line {...common} />
+  return (
+    <Group
+      ref={groupRef}
+      id={element.id}
+      x={element.x}
+      y={element.y}
+      draggable={!element.locked}
+      onClick={handleSelect}
+      onTap={handleSelect}
+      onDragEnd={(e) => onChange({ x: e.target.x(), y: e.target.y() })}
+    >
+      {element.endHead || element.startHead ? (
+        <Arrow
+          {...lineProps}
+          fill={element.stroke}
+          pointerLength={10}
+          pointerWidth={10}
+          pointerAtBeginning={element.startHead}
+          pointerAtEnding={element.endHead}
+        />
+      ) : (
+        <Line {...lineProps} />
+      )}
+    </Group>
+  )
 }
 
 export function CanvasImageElement({

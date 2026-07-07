@@ -1,16 +1,18 @@
 import { Layout } from 'lucide-react'
-import { SectionLabel } from './shared'
+import { InspectorShell, SectionLabel } from './shared'
 import { useEditorStore } from '../state/editorStore'
 import { deleteCanvas, updateCanvas } from '../../db/canvasRepo'
 import { confirmDelete } from '../../utils/confirmDelete'
 
-export function EmptyInspector() {
+export function EmptyInspector({ onClose }: { onClose?: () => void }) {
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
   const setElements = useEditorStore((s) => s.setElements)
 
   if (!activeCanvas) {
     return (
-      <div className="p-5 text-sm text-text-secondary">Select a canvas to edit settings.</div>
+      <InspectorShell icon={Layout} label="Inspector" onClose={onClose}>
+        <p className="text-sm text-text-secondary">Select a canvas to edit settings.</p>
+      </InspectorShell>
     )
   }
 
@@ -21,14 +23,7 @@ export function EmptyInspector() {
   }
 
   return (
-    <div className="p-5">
-      <div className="mb-5 flex items-center gap-2 border-b border-panel-border pb-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-          <Layout className="h-4 w-4 text-primary" />
-        </div>
-        <span className="text-base font-semibold">Canvas</span>
-      </div>
-
+    <InspectorShell icon={Layout} label="Canvas" onClose={onClose}>
       <div className="space-y-4">
         <div>
           <SectionLabel>Canvas name</SectionLabel>
@@ -113,6 +108,6 @@ export function EmptyInspector() {
           Delete canvas
         </button>
       </div>
-    </div>
+    </InspectorShell>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FileText } from 'lucide-react'
-import { InspectorHeader, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
 import type { MarkdownElement } from '../../db/schema'
 import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
@@ -57,7 +57,7 @@ function MarkdownStyleSettings({
   )
 }
 
-export function MarkdownInspector({ element }: { element: MarkdownElement }) {
+export function MarkdownInspector({ element, onClose }: { element: MarkdownElement; onClose?: () => void }) {
   const [tab, setTab] = useState<Tab>('edit')
   const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
   const elements = useEditorStore((s) => s.elements)
@@ -91,8 +91,7 @@ export function MarkdownInspector({ element }: { element: MarkdownElement }) {
   )
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={FileText} label="Markdown" />
+    <InspectorShell icon={FileText} label="Markdown" onClose={onClose}>
 
       <div className="mb-4 flex gap-1 border-b border-panel-border">
         {tabBtn('edit', 'Edit')}
@@ -146,6 +145,6 @@ export function MarkdownInspector({ element }: { element: MarkdownElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

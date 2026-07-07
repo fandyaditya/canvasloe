@@ -6,14 +6,14 @@ import {
   Folder,
   HardDrive,
   LayoutGrid,
-  PanelLeftClose,
+  PanelLeft,
   Plus,
   Settings,
   Trash2,
 } from 'lucide-react'
 import { db } from '../db/db'
 import { createProject, deleteProject, updateProject } from '../db/projectRepo'
-import { createCanvas, deleteCanvas } from '../db/canvasRepo'
+import { createCanvas, deleteCanvas, updateCanvas } from '../db/canvasRepo'
 import { useEditorStore } from './state/editorStore'
 import { useCanvasLoader } from './hooks/useCanvasLoader'
 import {
@@ -30,10 +30,9 @@ export function LeftSidebar() {
   const activeCanvasId = useEditorStore((s) => s.activeCanvasId)
   const activeProjectId = useEditorStore((s) => s.activeProjectId)
   const expandedProjects = useEditorStore((s) => s.expandedProjects)
+  const setActiveProject = useEditorStore((s) => s.setActiveProject)
   const toggleProjectExpanded = useEditorStore((s) => s.toggleProjectExpanded)
   const setLeftSidebarOpen = useEditorStore((s) => s.setLeftSidebarOpen)
-  // OPFS browser hidden — native Finder/Explorer cannot open OPFS from a web app.
-  // const setOpfsBrowserOpen = useEditorStore((s) => s.setOpfsBrowserOpen)
   const { loadCanvas } = useCanvasLoader()
   const [storage, setStorage] = useState<StorageBreakdown | null>(null)
 
@@ -99,6 +98,14 @@ export function LeftSidebar() {
     state.clearMarkdownCache()
   }
 
+  const handleRenameCanvas = async (canvasId: string, name: string) => {
+    await updateCanvas(canvasId, { name })
+    const state = useEditorStore.getState()
+    if (state.activeCanvas?.id === canvasId) {
+      state.setActiveCanvas({ ...state.activeCanvas, name })
+    }
+  }
+
   const handleDeleteCanvas = async (canvasId: string, canvasName: string, projectId: string) => {
     if (
       !(await confirmDelete(
@@ -151,7 +158,7 @@ export function LeftSidebar() {
           onClick={() => setLeftSidebarOpen(false)}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-gray-100 hover:text-text-primary"
         >
-          <PanelLeftClose className="h-4 w-4" />
+          <PanelLeft className="h-4 w-4" />
         </button>
       </div>
 
@@ -184,7 +191,12 @@ export function LeftSidebar() {
                   onToggle={() => toggleProjectExpanded(project.id)}
                   onCreateCanvas={() => void handleCreateCanvas(project.id)}
                   onSelectCanvas={(id) => void loadCanvas(id)}
+                  onSelectProject={() => {
+                    setActiveProject(project.id)
+                    if (!expanded) toggleProjectExpanded(project.id)
+                  }}
                   onRenameProject={(name) => void updateProject(project.id, { name })}
+                  onRenameCanvas={(canvasId, name) => void handleRenameCanvas(canvasId, name)}
                   onDeleteProject={() => void handleDeleteProject(project.id, project.name)}
                   onDeleteCanvas={(canvasId, canvasName) =>
                     void handleDeleteCanvas(canvasId, canvasName, project.id)
@@ -249,7 +261,9 @@ function ProjectItem({
   onToggle,
   onCreateCanvas,
   onSelectCanvas,
+  onSelectProject,
   onRenameProject,
+  onRenameCanvas,
   onDeleteProject,
   onDeleteCanvas,
 }: {
@@ -259,7 +273,9 @@ function ProjectItem({
   onToggle: () => void
   onCreateCanvas: () => void
   onSelectCanvas: (id: string) => void
+  onSelectProject: () => void
   onRenameProject: (name: string) => void
+  onRenameCanvas: (canvasId: string, name: string) => void
   onDeleteProject: () => void
   onDeleteCanvas: (canvasId: string, canvasName: string) => void
 }) {
@@ -280,6 +296,9 @@ function ProjectItem({
         <InlineEditable
           value={project.name}
           onSave={onRenameProject}
+          openOn="doubleClick"
+          onActivate={onSelectProject}
+          placeholder="Untitled Project"
           className="flex-1 truncate text-sm font-medium"
           inputClassName="min-w-0 flex-1 rounded border border-panel-border px-1 py-0.5 text-sm font-medium outline-none focus:border-primary"
         />
@@ -327,7 +346,14 @@ function ProjectItem({
                     }`}
                   >
                     {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                    <span className={`truncate ${active ? '' : 'ml-3.5'}`}>{canvas.name}</span>
+                    <InlineEditable
+                      value={canvas.name}
+                      onSave={(name) => onRenameCanvas(canvas.id, name)}
+                      openOn="doubleClick"
+                      placeholder="Untitled Canvas"
+                      className={`min-w-0 flex-1 truncate ${active ? '' : 'ml-3.5'}`}
+                      inputClassName="min-w-0 flex-1 rounded border border-panel-border px-1 py-0.5 text-sm outline-none focus:border-primary"
+                    />
                   </button>
                   <button
                     type="button"

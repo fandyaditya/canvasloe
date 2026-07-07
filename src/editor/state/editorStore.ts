@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Canvas, CanvasElement, SaveStatus, Tool } from '../../db/schema'
+import type { Canvas, CanvasElement, SaveStatus, ShapeTool, Tool } from '../../db/schema'
 import { normalizeCanvasElements } from '../frame/frameLayout'
 
 type CanvasCache = {
@@ -15,6 +15,7 @@ type EditorStore = {
   elements: CanvasElement[]
   selectedElementIds: string[]
   currentTool: Tool
+  preferredShapeTool: ShapeTool
   zoom: number
   pan: { x: number; y: number }
   isDragging: boolean
@@ -86,6 +87,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   elements: [],
   selectedElementIds: [],
   currentTool: 'select',
+  preferredShapeTool: 'rect',
   zoom: 1,
   pan: { x: 0, y: 0 },
   isDragging: false,
@@ -165,7 +167,13 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   clearSelection: () => set({ selectedElementIds: [] }),
 
-  setCurrentTool: (tool) => set({ currentTool: tool }),
+  setCurrentTool: (tool) =>
+    set({
+      currentTool: tool,
+      ...(tool === 'rect' || tool === 'circle' || tool === 'arrow'
+        ? { preferredShapeTool: tool }
+        : {}),
+    }),
 
   setZoom: (zoom) => set({ zoom: Math.min(3, Math.max(0.25, zoom)) }),
 

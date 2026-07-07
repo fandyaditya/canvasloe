@@ -1,5 +1,5 @@
 import { Droplet } from 'lucide-react'
-import { InspectorHeader, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
 import type { PaletteElement } from '../../db/schema'
 import {
   PALETTE_SLOT_LABELS,
@@ -11,7 +11,7 @@ import { useAutosave } from '../hooks/useAutosave'
 import { useHistoryStore } from '../state/historyStore'
 import { duplicateElement, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
 
-export function PaletteInspector({ element }: { element: PaletteElement }) {
+export function PaletteInspector({ element, onClose }: { element: PaletteElement; onClose?: () => void }) {
   const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
   const elements = useEditorStore((s) => s.elements)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
@@ -40,8 +40,7 @@ export function PaletteInspector({ element }: { element: PaletteElement }) {
   }
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={Droplet} label="Colour palette" />
+    <InspectorShell icon={Droplet} label="Colour palette" onClose={onClose}>
 
       <div className="space-y-4">
         <div>
@@ -96,6 +95,6 @@ export function PaletteInspector({ element }: { element: PaletteElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

@@ -265,6 +265,8 @@ export type CanvasHistory = {
   future: CanvasSnapshot[]
 }
 
-export type Tool = 'select' | 'rect' | 'circle' | 'arrow' | 'text' | 'color' | 'hand' | 'markdown' | 'frame'
+export type ShapeTool = 'rect' | 'circle' | 'arrow'
+
+export type Tool = 'select' | ShapeTool | 'text' | 'color' | 'hand' | 'markdown' | 'frame'
 
 export type SaveStatus = 'saved' | 'saving' | 'error'

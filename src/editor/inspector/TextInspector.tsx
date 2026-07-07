@@ -1,5 +1,5 @@
 import { Type, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight } from 'lucide-react'
-import { InspectorHeader, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, ColorField, OpacitySlider, ElementActions } from './shared'
 import type { TextElement } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
@@ -10,7 +10,7 @@ const FONTS = ['Playfair Display', 'Inter', 'Georgia', 'Arial', 'Helvetica']
 const WEIGHTS = ['regular', 'medium', 'semibold', 'bold'] as const
 const SIZES = [12, 14, 16, 18, 24, 32, 48, 56, 64, 72]
 
-export function TextInspector({ element }: { element: TextElement }) {
+export function TextInspector({ element, onClose }: { element: TextElement; onClose?: () => void }) {
   const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
   const elements = useEditorStore((s) => s.elements)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
@@ -37,9 +37,7 @@ export function TextInspector({ element }: { element: TextElement }) {
   )
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={Type} label="Text" />
-
+    <InspectorShell icon={Type} label="Text" onClose={onClose}>
       <div className="space-y-4">
         <div>
           <SectionLabel>Content</SectionLabel>
@@ -150,6 +148,6 @@ export function TextInspector({ element }: { element: TextElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

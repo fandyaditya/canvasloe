@@ -1,5 +1,5 @@
 import { ImageIcon, Upload } from 'lucide-react'
-import { InspectorHeader, SectionLabel, OpacitySlider, ElementActions } from './shared'
+import { InspectorShell, SectionLabel, OpacitySlider, ElementActions } from './shared'
 import type { ImageElement } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
@@ -10,7 +10,7 @@ import { getImageDimensions } from '../../utils/image'
 import { useEffect, useState } from 'react'
 import { getObjectUrl } from '../../utils/objectUrlCache'
 
-export function ImageInspector({ element }: { element: ImageElement }) {
+export function ImageInspector({ element, onClose }: { element: ImageElement; onClose?: () => void }) {
   const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
   const elements = useEditorStore((s) => s.elements)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
@@ -49,8 +49,7 @@ export function ImageInspector({ element }: { element: ImageElement }) {
   }
 
   return (
-    <div className="p-5">
-      <InspectorHeader icon={ImageIcon} label="Image" />
+    <InspectorShell icon={ImageIcon} label="Image" onClose={onClose}>
 
       <div className="space-y-4">
         <div>
@@ -133,6 +132,6 @@ export function ImageInspector({ element }: { element: ImageElement }) {
           debouncedSave(activeCanvas, newElements)
         }}
       />
-    </div>
+    </InspectorShell>
   )
 }

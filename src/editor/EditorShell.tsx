@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { PanelRightClose } from 'lucide-react'
 import { AnimatedSidebarSlot } from './AnimatedSidebarSlot'
 import { LeftSidebar } from './LeftSidebar'
 import { TopBar } from './TopBar'
@@ -55,20 +54,9 @@ export function EditorShell() {
           <CanvasStage />
         </div>
         <AnimatedSidebarSlot side="right" open={rightSidebarOpen} width={320}>
-          <aside className="flex h-full w-[320px] flex-col bg-white">
-            <div className="flex justify-end border-b border-panel-border px-2 py-2">
-              <button
-                type="button"
-                title="Close inspector"
-                aria-label="Close inspector sidebar"
-                onClick={() => setRightSidebarOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-gray-100 hover:text-text-primary"
-              >
-                <PanelRightClose className="h-4 w-4" />
-              </button>
-            </div>
+          <aside className="flex h-full w-[320px] flex-col overflow-hidden bg-white">
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <RightInspector />
+              <RightInspector onClose={() => setRightSidebarOpen(false)} />
             </div>
           </aside>
         </AnimatedSidebarSlot>
