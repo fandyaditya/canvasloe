@@ -9,13 +9,16 @@ import {
   PanelLeftClose,
   Plus,
   Settings,
+  Trash2,
 } from 'lucide-react'
 import { db } from '../db/db'
-import { createProject, updateProject } from '../db/projectRepo'
-import { createCanvas } from '../db/canvasRepo'
+import { createProject, deleteProject, updateProject } from '../db/projectRepo'
+import { createCanvas, deleteCanvas } from '../db/canvasRepo'
 import { useEditorStore } from './state/editorStore'
 import { useCanvasLoader } from './hooks/useCanvasLoader'
 import { formatBytes, getStorageUsage } from '../utils/image'
+import { subscribeStorageUsage } from '../utils/storageUsage'
+import { confirmDelete, promptInput } from '../utils/confirmDelete'
 import { InlineEditable } from './components/InlineEditable'
 
 export function LeftSidebar() {
@@ -25,13 +28,17 @@ export function LeftSidebar() {
   const expandedProjects = useEditorStore((s) => s.expandedProjects)
   const toggleProjectExpanded = useEditorStore((s) => s.toggleProjectExpanded)
   const setLeftSidebarOpen = useEditorStore((s) => s.setLeftSidebarOpen)
+  // OPFS browser hidden — native Finder/Explorer cannot open OPFS from a web app.
+  // const setOpfsBrowserOpen = useEditorStore((s) => s.setOpfsBrowserOpen)
   const { loadCanvas } = useCanvasLoader()
-  const [storage, setStorage] = useState({ used: 0, quota: 1024 * 1024 * 1024 })
+  const [storageUsed, setStorageUsed] = useState(0)
 
   useEffect(() => {
-    void getStorageUsage().then(setStorage)
-    const interval = setInterval(() => void getStorageUsage().then(setStorage), 10000)
-    return () => clearInterval(interval)
+    const refresh = () => {
+      void getStorageUsage().then(({ used }) => setStorageUsed(used))
+    }
+    refresh()
+    return subscribeStorageUsage(refresh)
   }, [])
 
   useEffect(() => {
@@ -42,7 +49,12 @@ export function LeftSidebar() {
   }, [activeProjectId, expandedProjects, toggleProjectExpanded])
 
   const handleCreateProject = async () => {
-    const name = prompt('Project name:', 'New Project')
+    const name = await promptInput({
+      title: 'New project',
+      message: 'Project name',
+      defaultValue: 'New Project',
+      confirmLabel: 'Create',
+    })
     if (!name) return
     const project = await createProject(name)
     toggleProjectExpanded(project.id)
@@ -53,7 +65,71 @@ export function LeftSidebar() {
     await loadCanvas(canvas.id)
   }
 
-  const usagePercent = storage.quota > 0 ? (storage.used / storage.quota) * 100 : 0
+  const handleDeleteProject = async (projectId: string, projectName: string) => {
+    if (
+      !(await confirmDelete(
+        `Are you sure you want to delete "${projectName}"?\n\nAll canvases and files in this project will be permanently removed.`,
+      ))
+    ) {
+      return
+    }
+
+    const state = useEditorStore.getState()
+    const wasActiveProject = state.activeProjectId === projectId
+
+    await deleteProject(projectId)
+
+    if (!wasActiveProject) return
+
+    const nextCanvas = await db.canvases.orderBy('createdAt').first()
+    if (nextCanvas) {
+      await loadCanvas(nextCanvas.id)
+      return
+    }
+
+    state.setActiveCanvas(null)
+    state.setActiveCanvasId(null)
+    state.setActiveProject(null)
+    state.setElements([])
+    state.clearSelection()
+    state.clearMarkdownCache()
+  }
+
+  const handleDeleteCanvas = async (canvasId: string, canvasName: string, projectId: string) => {
+    if (
+      !(await confirmDelete(
+        `Are you sure you want to delete "${canvasName}"?\n\nAll elements and files on this canvas will be permanently removed.`,
+      ))
+    ) {
+      return
+    }
+
+    const state = useEditorStore.getState()
+    const wasActive = state.activeCanvasId === canvasId
+
+    await deleteCanvas(canvasId)
+
+    if (!wasActive) return
+
+    const siblings = await db.canvases.where('projectId').equals(projectId).sortBy('createdAt')
+    if (siblings.length > 0) {
+      await loadCanvas(siblings[0].id)
+      return
+    }
+
+    const fallbackCanvas = await db.canvases.orderBy('createdAt').first()
+    if (fallbackCanvas) {
+      await loadCanvas(fallbackCanvas.id)
+      return
+    }
+
+    state.setActiveCanvas(null)
+    state.setActiveCanvasId(null)
+    state.setActiveProject(null)
+    state.setElements([])
+    state.clearSelection()
+    state.clearMarkdownCache()
+  }
 
   return (
     <aside className="flex h-full w-[260px] shrink-0 flex-col bg-white">
@@ -105,6 +181,10 @@ export function LeftSidebar() {
                   onCreateCanvas={() => void handleCreateCanvas(project.id)}
                   onSelectCanvas={(id) => void loadCanvas(id)}
                   onRenameProject={(name) => void updateProject(project.id, { name })}
+                  onDeleteProject={() => void handleDeleteProject(project.id, project.name)}
+                  onDeleteCanvas={(canvasId, canvasName) =>
+                    void handleDeleteCanvas(canvasId, canvasName, project.id)
+                  }
                 />
               )
             })
@@ -114,18 +194,20 @@ export function LeftSidebar() {
 
       <div className="border-t border-panel-border p-3">
         <div className="mb-3 rounded-xl border border-panel-border bg-gray-50 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-text-secondary">
+          <div className="mb-1 flex items-center gap-2 text-xs font-medium text-text-secondary">
             <HardDrive className="h-3.5 w-3.5" />
             Local Storage
           </div>
-          <div className="mb-1.5 h-1.5 overflow-hidden rounded-full bg-gray-200">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${Math.min(usagePercent, 100)}%` }}
-            />
-          </div>
-          <div className="text-xs text-text-secondary">{formatBytes(storage.used)} used</div>
+          <div className="text-xs text-text-secondary">{formatBytes(storageUsed)} used</div>
         </div>
+        {/* OPFS in-app browser — disabled; re-enable with onClick={() => setOpfsBrowserOpen(true)} */}
+        {/* <button
+          type="button"
+          onClick={() => setOpfsBrowserOpen(true)}
+          className="mb-3 w-full rounded-xl border border-panel-border bg-gray-50 p-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
+        >
+          ...
+        </button> */}
         <button
           type="button"
           className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-text-secondary hover:bg-gray-50"
@@ -146,6 +228,8 @@ function ProjectItem({
   onCreateCanvas,
   onSelectCanvas,
   onRenameProject,
+  onDeleteProject,
+  onDeleteCanvas,
 }: {
   project: { id: string; name: string }
   expanded: boolean
@@ -154,6 +238,8 @@ function ProjectItem({
   onCreateCanvas: () => void
   onSelectCanvas: (id: string) => void
   onRenameProject: (name: string) => void
+  onDeleteProject: () => void
+  onDeleteCanvas: (canvasId: string, canvasName: string) => void
 }) {
   const canvases = useLiveQuery(
     () => db.canvases.where('projectId').equals(project.id).sortBy('createdAt'),
@@ -179,9 +265,21 @@ function ProjectItem({
         <button
           type="button"
           onClick={onCreateCanvas}
+          title="New canvas"
           className="flex h-6 w-6 items-center justify-center rounded-md opacity-0 text-text-secondary hover:bg-gray-100 hover:text-primary group-hover:opacity-100"
         >
           <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDeleteProject()
+          }}
+          title="Delete project"
+          className="flex h-6 w-6 items-center justify-center rounded-md opacity-0 text-text-secondary hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
 
@@ -193,19 +291,34 @@ function ProjectItem({
             canvases.map((canvas) => {
               const active = canvas.id === activeCanvasId
               return (
-                <button
+                <div
                   key={canvas.id}
-                  type="button"
-                  onClick={() => onSelectCanvas(canvas.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
-                    active
-                      ? 'bg-primary/10 font-medium text-primary'
-                      : 'text-text-secondary hover:bg-gray-50 hover:text-text-primary'
+                  className={`group/canvas flex items-center gap-1 rounded-lg pr-1 ${
+                    active ? 'bg-primary/10' : 'hover:bg-gray-50'
                   }`}
                 >
-                  {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                  <span className={`truncate ${active ? '' : 'ml-3.5'}`}>{canvas.name}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => onSelectCanvas(canvas.id)}
+                    className={`flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors ${
+                      active ? 'font-medium text-primary' : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                    <span className={`truncate ${active ? '' : 'ml-3.5'}`}>{canvas.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete canvas"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDeleteCanvas(canvas.id, canvas.name)
+                    }}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-secondary opacity-0 hover:bg-red-50 hover:text-red-500 group-hover/canvas:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               )
             })
           )}

@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { createAsset } from '../../db/assetRepo'
+import { createImageMedia, readMediaBlob } from '../../db/mediaRepo'
 import { createElement } from '../../db/elementRepo'
 import { useEditorStore } from '../state/editorStore'
 import { useHistoryStore } from '../state/historyStore'
@@ -49,16 +49,15 @@ export function useImageImport() {
       const width = naturalWidth * scale
       const height = naturalHeight * scale
 
-      const asset = await createAsset({
-        projectId: activeProjectId,
-        canvasId: activeCanvas.id,
-        mimeType: blob.type || file.type || 'image/png',
-        width: naturalWidth,
-        height: naturalHeight,
+      const asset = await createImageMedia(
+        activeProjectId,
+        activeCanvas.id,
         blob,
-      })
+        { width: naturalWidth, height: naturalHeight },
+      )
 
-      await getImageElement(asset.id, blob)
+      const imageBlob = await readMediaBlob(asset.id)
+      await getImageElement(asset.id, imageBlob)
 
       const elements = useEditorStore.getState().elements
       const maxZ = elements.reduce((m, el) => Math.max(m, el.zIndex), 0)
@@ -85,6 +84,7 @@ export function useImageImport() {
       debouncedSave(activeCanvas, newElements)
       setSelectedElementIds([element.id])
       setPan(getPanToCenterRect(element, canvasViewportSize, zoom))
+      useEditorStore.getState().setCurrentTool('select')
       setSaveStatus('saved')
       return element
     },

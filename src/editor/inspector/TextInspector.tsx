@@ -4,7 +4,7 @@ import type { TextElement } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
 import { useHistoryStore } from '../state/historyStore'
-import { duplicateElement, deleteElement } from '../../db/elementRepo'
+import { duplicateElement, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
 
 const FONTS = ['Playfair Display', 'Inter', 'Georgia', 'Arial', 'Helvetica']
 const WEIGHTS = ['regular', 'medium', 'semibold', 'bold'] as const
@@ -143,7 +143,7 @@ export function TextInspector({ element }: { element: TextElement }) {
         onDelete={async () => {
           if (!activeCanvas) return
           await deleteElement(element.id)
-          const newElements = elements.filter((el) => el.id !== element.id)
+          const newElements = removeElementsFromCanvas(elements, [element.id])
           setElements(newElements)
           useEditorStore.getState().clearSelection()
           useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)

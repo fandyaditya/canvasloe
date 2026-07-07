@@ -18,7 +18,7 @@ export type Canvas = {
   updatedAt: number
 }
 
-export type ElementType = 'text' | 'image' | 'shape' | 'arrow' | 'palette' | 'markdown'
+export type ElementType = 'text' | 'image' | 'shape' | 'arrow' | 'palette' | 'markdown' | 'frame'
 
 export type BaseElement = {
   id: string
@@ -84,6 +84,9 @@ export type ArrowElement = BaseElement & {
   points: number[]
 }
 
+/** Invisible padding around arrow stroke for easier click / marquee selection */
+export const ARROW_HIT_STROKE_WIDTH = 28
+
 export type PaletteElement = BaseElement & {
   type: 'palette'
   colors: string[]
@@ -92,12 +95,52 @@ export type PaletteElement = BaseElement & {
 
 export type MarkdownElement = BaseElement & {
   type: 'markdown'
-  markdown: string
+  contentId: string
   fontFamily: string
   textColor: string
   backgroundColor: string
   padding: number
   radius: number
+}
+
+export type FrameElement = BaseElement & {
+  type: 'frame'
+  backgroundColor: string
+  padding: number
+  radius: number
+  gap: number
+  columns: number
+  childIds: string[]
+  aspectRatio: number
+}
+
+export const FRAME_DEFAULT_SIZE = { width: 480, height: 360 } as const
+export const FRAME_MIN_WIDTH = 200
+export const FRAME_MAX_WIDTH = 2400
+export const FRAME_MIN_HEIGHT = 150
+export const FRAME_MAX_HEIGHT = 1600
+export const FRAME_DEFAULT_PADDING = 24
+export const FRAME_DEFAULT_GAP = 16
+export const FRAME_DEFAULT_RADIUS = 16
+export const FRAME_DEFAULT_BACKGROUND = '#FFFFFF'
+export const FRAME_MAX_CHILDREN = 24
+
+export function getFrameAspectRatio(width: number, height: number): number {
+  return height > 0 ? width / height : 1
+}
+
+export function clampFrameSize(width: number, height: number): { width: number; height: number } {
+  let w = Math.max(FRAME_MIN_WIDTH, Math.min(FRAME_MAX_WIDTH, width))
+  let h = Math.max(FRAME_MIN_HEIGHT, Math.min(FRAME_MAX_HEIGHT, height))
+  const ratio = w / h
+  const minRatio = FRAME_MIN_WIDTH / FRAME_MAX_HEIGHT
+  const maxRatio = FRAME_MAX_WIDTH / FRAME_MIN_HEIGHT
+  if (ratio < minRatio) w = h * minRatio
+  if (ratio > maxRatio) h = w / maxRatio
+  return {
+    width: Math.max(FRAME_MIN_WIDTH, Math.min(FRAME_MAX_WIDTH, w)),
+    height: Math.max(FRAME_MIN_HEIGHT, Math.min(FRAME_MAX_HEIGHT, h)),
+  }
 }
 
 export const MARKDOWN_DEFAULT_CONTENT = `# Brand Direction
@@ -141,6 +184,11 @@ export function getPaletteDimensions(colorCount: number): { width: number; heigh
   }
 }
 
+export function getPaletteAspectRatio(colorCount: number): number {
+  const { width, height } = getPaletteDimensions(colorCount)
+  return width / height
+}
+
 export function paletteColorsForCount(current: string[], colorCount: number): string[] {
   const colors = current.slice(0, colorCount)
   while (colors.length < colorCount) {
@@ -156,17 +204,26 @@ export type CanvasElement =
   | ArrowElement
   | PaletteElement
   | MarkdownElement
+  | FrameElement
 
-export type ImageAsset = {
+export type MediaKind = 'image' | 'video' | 'markdown'
+
+export type MediaAsset = {
   id: string
   projectId: string
-  canvasId?: string
+  canvasId: string
+  kind: MediaKind
   mimeType: string
-  width: number
-  height: number
-  blob: Blob
+  filename: string
+  opfsPath: string
+  width?: number
+  height?: number
+  size: number
   createdAt: number
 }
+
+/** @deprecated Use MediaAsset */
+export type ImageAsset = MediaAsset
 
 export type CanvasSnapshot = {
   elements: CanvasElement[]
@@ -178,6 +235,6 @@ export type CanvasHistory = {
   future: CanvasSnapshot[]
 }
 
-export type Tool = 'select' | 'rect' | 'circle' | 'arrow' | 'text' | 'color' | 'hand' | 'markdown'
+export type Tool = 'select' | 'rect' | 'circle' | 'arrow' | 'text' | 'color' | 'hand' | 'markdown' | 'frame'
 
 export type SaveStatus = 'saved' | 'saving' | 'error'

@@ -1,6 +1,7 @@
 import { db } from './db'
 import type { Project } from './schema'
 import { createId } from '../utils/ids'
+import { deleteCanvasMedia, deleteProjectMedia } from './mediaRepo'
 
 export async function getAllProjects(): Promise<Project[]> {
   return db.projects.orderBy('createdAt').toArray()
@@ -30,9 +31,9 @@ export async function deleteProject(id: string): Promise<void> {
   const canvases = await db.canvases.where('projectId').equals(id).toArray()
   for (const canvas of canvases) {
     await db.elements.where('canvasId').equals(canvas.id).delete()
-    await db.assets.where('canvasId').equals(canvas.id).delete()
+    await deleteCanvasMedia(id, canvas.id)
     await db.canvases.delete(canvas.id)
   }
-  await db.assets.where('projectId').equals(id).delete()
+  await deleteProjectMedia(id)
   await db.projects.delete(id)
 }

@@ -2,6 +2,7 @@ import { Layout } from 'lucide-react'
 import { SectionLabel } from './shared'
 import { useEditorStore } from '../state/editorStore'
 import { deleteCanvas, updateCanvas } from '../../db/canvasRepo'
+import { confirmDelete } from '../../utils/confirmDelete'
 
 export function EmptyInspector() {
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
@@ -94,10 +95,18 @@ export function EmptyInspector() {
         <button
           type="button"
           onClick={async () => {
-            if (!confirm('Delete this canvas?')) return
+            if (
+              !(await confirmDelete(
+                `Are you sure you want to delete "${activeCanvas.name}"?\n\nAll elements and files on this canvas will be permanently removed.`,
+              ))
+            ) {
+              return
+            }
             await deleteCanvas(activeCanvas.id)
             setElements([])
+            useEditorStore.getState().clearMarkdownCache()
             useEditorStore.getState().setActiveCanvas(null)
+            useEditorStore.getState().setActiveCanvasId(null)
           }}
           className="mt-4 w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50"
         >

@@ -6,12 +6,17 @@ import { useHistoryStore } from './state/historyStore'
 import { useAutosave } from './hooks/useAutosave'
 import { useDropImage } from './hooks/useDropImage'
 import { useCanvasWheelZoom } from './hooks/useCanvasWheelZoom'
+import { useCanvasShiftKey } from './hooks/useCanvasShiftKey'
 import { useShiftHandHold } from './hooks/useShiftHandHold'
 import { createElement } from '../db/elementRepo'
+import { createMarkdownMedia } from '../db/mediaRepo'
 import { renderElement } from './components/CanvasElements'
 import { TextEditOverlay } from './components/TextEditOverlay'
-import type { ArrowElement, CanvasElement, MarkdownElement, PaletteElement, ShapeElement, TextElement } from '../db/schema'
-import { MARKDOWN_DEFAULT_CONTENT, MARKDOWN_DEFAULT_SIZE, MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, PALETTE_DEFAULT_COLORS, getPaletteDimensions } from '../db/schema'
+import { CanvasGestureCue } from './components/CanvasGestureCue'
+import type { ArrowElement, CanvasElement, FrameElement, MarkdownElement, PaletteElement, ShapeElement, TextElement } from '../db/schema'
+import { MARKDOWN_DEFAULT_CONTENT, MARKDOWN_DEFAULT_SIZE, MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, PALETTE_DEFAULT_COLORS, getPaletteDimensions, ARROW_HIT_STROKE_WIDTH, FRAME_MIN_WIDTH, FRAME_MIN_HEIGHT, FRAME_MAX_WIDTH, FRAME_MAX_HEIGHT, clampFrameSize, getFrameAspectRatio } from '../db/schema'
+import { createEmptyFrameAt, addChildToFrame } from './frame/createFrame'
+import { canBeFrameChild, findFrameAtPoint, getElementCenter, moveFrameChildren, scaleFrameChildren } from './frame/frameLayout'
 
 type ShapePreview = {
   tool: 'rect' | 'circle'
@@ -54,6 +59,7 @@ export function CanvasStage() {
   const pan = useEditorStore((s) => s.pan)
   const isPanning = useEditorStore((s) => s.isPanning)
   const isShiftHandHold = useEditorStore((s) => s.isShiftHandHold)
+  const isScrollPanHold = useEditorStore((s) => s.isScrollPanHold)
   const isEditingText = useEditorStore((s) => s.isEditingText)
   const setPan = useEditorStore((s) => s.setPan)
   const setIsPanning = useEditorStore((s) => s.setIsPanning)
@@ -65,11 +71,14 @@ export function CanvasStage() {
   const addElementLocal = useEditorStore((s) => s.addElementLocal)
   const defaultColor = useEditorStore((s) => s.defaultColor)
   const setOpenMarkdownId = useEditorStore((s) => s.setOpenMarkdownId)
+  const setCurrentTool = useEditorStore((s) => s.setCurrentTool)
+  const setRightSidebarOpen = useEditorStore((s) => s.setRightSidebarOpen)
   const setCanvasViewportSize = useEditorStore((s) => s.setCanvasViewportSize)
 
   const { debouncedSave } = useAutosave()
   const { handleDrop, handleDragOver } = useDropImage(containerRef)
   useCanvasWheelZoom(containerRef, activeCanvas != null)
+  useCanvasShiftKey(activeCanvas != null)
   useShiftHandHold(containerRef)
 
   const selectedIds = useMemo(() => new Set(selectedElementIds), [selectedElementIds])
@@ -77,7 +86,13 @@ export function CanvasStage() {
   const lockAspectRatio = useMemo(() => {
     if (selectedElementIds.length !== 1) return false
     const el = elements.find((e) => e.id === selectedElementIds[0])
-    return el?.type === 'markdown' || el?.type === 'image'
+    return el?.type === 'markdown' || el?.type === 'image' || el?.type === 'palette' || el?.type === 'frame'
+  }, [selectedElementIds, elements])
+
+  const frameSelected = useMemo(() => {
+    if (selectedElementIds.length !== 1) return false
+    const el = elements.find((e) => e.id === selectedElementIds[0])
+    return el?.type === 'frame'
   }, [selectedElementIds, elements])
 
   useEffect(() => {
@@ -99,17 +114,13 @@ export function CanvasStage() {
     const tr = transformerRef.current
     const stage = stageRef.current
     if (!tr || !stage) return
-    if (isEditingText) {
-      tr.nodes([])
-      tr.getLayer()?.batchDraw()
-      return
-    }
     const nodes = selectedElementIds
+      .filter((id) => id !== editingTextId)
       .map((id) => stage.findOne(`#${id}`))
       .filter((node): node is Konva.Node => node != null)
     tr.nodes(nodes)
     tr.getLayer()?.batchDraw()
-  }, [selectedElementIds, elements, isEditingText])
+  }, [selectedElementIds, editingTextId])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -137,6 +148,13 @@ export function CanvasStage() {
     }
   }, [currentTool])
 
+  const commitElements = (newElements: CanvasElement[]) => {
+    if (!activeCanvas) return
+    setElements(newElements)
+    useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
+    debouncedSave(activeCanvas, newElements)
+  }
+
   const commitChange = () => {
     if (!activeCanvas) return
     const newElements = useEditorStore.getState().elements
@@ -145,37 +163,124 @@ export function CanvasStage() {
   }
 
   const handleElementChange = (id: string, updates: Partial<CanvasElement>) => {
-    updateElementLocal(id, updates)
-    commitChange()
-  }
+    const el = elements.find((e) => e.id === id)
+    if (!el) return
 
-  const syncNodePositionToStore = (id: string) => {
-    const stage = stageRef.current
-    const node = stage?.findOne(`#${id}`)
-    if (!node) return
+    const isDragEnd = updates.x !== undefined || updates.y !== undefined
 
-    const updates: Partial<CanvasElement> = {
-      x: node.x(),
-      y: node.y(),
-      rotation: node.rotation(),
-    }
+    if (isDragEnd && canBeFrameChild(el)) {
+      const dx = (updates.x ?? el.x) - el.x
+      const dy = (updates.y ?? el.y) - el.y
 
-    if (node.getClassName() === 'Text') {
-      const textNode = node as Konva.Text
-      const scaleX = textNode.scaleX()
-      if (scaleX !== 1) {
-        updates.width = textNode.width() * scaleX
-        textNode.scaleX(1)
-        textNode.scaleY(1)
+      if (Math.hypot(dx, dy) > 3) {
+        const nextEl = { ...el, ...updates } as CanvasElement
+        const center = getElementCenter(nextEl)
+        const targetFrame = findFrameAtPoint(center.x, center.y, elements)
+        const currentFrame = elements.find(
+          (f): f is FrameElement => f.type === 'frame' && f.childIds.includes(id),
+        )
+
+        if (targetFrame && targetFrame.id !== currentFrame?.id) {
+          let next = elements.map((item) =>
+            item.id === id ? nextEl : item,
+          )
+          next = addChildToFrame(next, targetFrame.id, id)
+          commitElements(next)
+          return
+        }
       }
     }
 
     updateElementLocal(id, updates)
+    commitChange()
+  }
+
+  const handleFrameDragEnd = (frameId: string, dx: number, dy: number) => {
+    const frame = elements.find((el): el is FrameElement => el.id === frameId && el.type === 'frame')
+    if (!frame || (dx === 0 && dy === 0)) return
+
+    const updatedFrame: FrameElement = { ...frame, x: frame.x + dx, y: frame.y + dy }
+    let next = elements.map((el) => (el.id === frameId ? updatedFrame : el))
+    next = moveFrameChildren(updatedFrame, dx, dy, next)
+    commitElements(next)
+  }
+
+  const handleFrameTransformEnd = (
+    frameId: string,
+    updates: Partial<FrameElement>,
+    prevBounds: { x: number; y: number; width: number; height: number },
+  ) => {
+    const frame = elements.find((el): el is FrameElement => el.id === frameId && el.type === 'frame')
+    if (!frame) return
+
+    const rawW = updates.width ?? frame.width
+    const rawH = updates.height ?? frame.height
+    const clamped = clampFrameSize(rawW, rawH)
+    const ratio = frame.aspectRatio || getFrameAspectRatio(frame.width, frame.height)
+    let width = clamped.width
+    let height = width / ratio
+    if (height < FRAME_MIN_HEIGHT) {
+      height = FRAME_MIN_HEIGHT
+      width = height * ratio
+    }
+    if (height > FRAME_MAX_HEIGHT) {
+      height = FRAME_MAX_HEIGHT
+      width = height * ratio
+    }
+    if (width < FRAME_MIN_WIDTH) {
+      width = FRAME_MIN_WIDTH
+      height = width / ratio
+    }
+    if (width > FRAME_MAX_WIDTH) {
+      width = FRAME_MAX_WIDTH
+      height = width / ratio
+    }
+
+    const updatedFrame: FrameElement = {
+      ...frame,
+      ...updates,
+      width,
+      height,
+      aspectRatio: getFrameAspectRatio(width, height),
+    }
+
+    let next = elements.map((el) => (el.id === frameId ? updatedFrame : el))
+    next = scaleFrameChildren(updatedFrame, prevBounds, next)
+    commitElements(next)
+  }
+
+  const handleSelectFrame = (frameId: string) => {
+    handleSelectElement(frameId)
+    setRightSidebarOpen(true)
+  }
+
+  const blurTextEditor = () => {
+    const active = document.activeElement
+    if (active instanceof HTMLTextAreaElement) {
+      active.blur()
+    }
+  }
+
+  const handleSelectElement = (id: string, multi?: boolean) => {
+    if (editingTextId && editingTextId !== id) {
+      blurTextEditor()
+    }
+    selectElement(id, multi)
   }
 
   const startTextEdit = (id: string) => {
-    syncNodePositionToStore(id)
-    selectElement(id)
+    const stage = stageRef.current
+    const node = stage?.findOne(`#${id}`)
+    if (node?.getClassName() === 'Text') {
+      const textNode = node as Konva.Text
+      const scaleX = textNode.scaleX()
+      if (scaleX !== 1) {
+        handleElementChange(id, { width: textNode.width() * scaleX })
+        textNode.scaleX(1)
+        textNode.scaleY(1)
+      }
+    }
+    handleSelectElement(id)
     setEditingTextId(id)
   }
 
@@ -202,7 +307,9 @@ export function CanvasStage() {
   }
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (currentTool === 'hand' || isPanning || isShiftHandHold || isEditingText) return
+    if (currentTool === 'hand' || isPanning || isShiftHandHold || isScrollPanHold) return
+
+    blurTextEditor()
 
     const clickedOnEmpty = e.target === e.target.getStage()
     if (clickedOnEmpty) {
@@ -232,12 +339,24 @@ export function CanvasStage() {
       if (currentTool === 'markdown' && activeCanvas) {
         void createMarkdownAt(pos.x, pos.y)
         drawingRef.current = null
+        return
+      }
+
+      if (currentTool === 'frame' && activeCanvas) {
+        void createFrameAt(pos.x, pos.y)
+        drawingRef.current = null
       }
     }
   }
 
   const createMarkdownAt = async (x: number, y: number) => {
     if (!activeCanvas) return
+    const mdMedia = await createMarkdownMedia(
+      activeCanvas.projectId,
+      activeCanvas.id,
+      MARKDOWN_DEFAULT_CONTENT,
+    )
+    useEditorStore.getState().setMarkdownContent(mdMedia.id, MARKDOWN_DEFAULT_CONTENT)
     const maxZ = elements.reduce((m, el) => Math.max(m, el.zIndex), 0)
     const el = await createElement({
       projectId: activeCanvas.projectId,
@@ -250,7 +369,7 @@ export function CanvasStage() {
       rotation: 0,
       opacity: 1,
       zIndex: maxZ + 1,
-      markdown: MARKDOWN_DEFAULT_CONTENT,
+      contentId: mdMedia.id,
       fontFamily: 'Inter',
       textColor: '#111827',
       backgroundColor: '#FFFFFF',
@@ -262,7 +381,8 @@ export function CanvasStage() {
     setElements(newElements)
     useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
     debouncedSave(activeCanvas, newElements)
-    selectElement(el.id)
+    handleSelectElement(el.id)
+    setCurrentTool('select')
   }
 
   const createPaletteAt = async (x: number, y: number) => {
@@ -289,7 +409,19 @@ export function CanvasStage() {
     setElements(newElements)
     useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
     debouncedSave(activeCanvas, newElements)
-    selectElement(el.id)
+    handleSelectElement(el.id)
+    setCurrentTool('select')
+  }
+
+  const createFrameAt = async (x: number, y: number) => {
+    if (!activeCanvas) return
+    const { frame, elements: newElements } = await createEmptyFrameAt(activeCanvas, elements, x, y)
+    setElements(newElements)
+    useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
+    debouncedSave(activeCanvas, newElements)
+    handleSelectElement(frame.id)
+    setRightSidebarOpen(true)
+    setCurrentTool('select')
   }
 
   const createTextAt = async (x: number, y: number) => {
@@ -320,8 +452,24 @@ export function CanvasStage() {
     setElements(newElements)
     useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
     debouncedSave(activeCanvas, newElements)
-    selectElement(el.id)
+    handleSelectElement(el.id)
     setEditingTextId(el.id)
+    setCurrentTool('select')
+  }
+
+  const openContextMenuAtPointer = (mode: 'selection' | 'element', elementId?: string) => {
+    const stage = stageRef.current
+    const container = containerRef.current
+    if (!stage || !container) return
+    const pointer = stage.getPointerPosition()
+    if (!pointer) return
+    const rect = container.getBoundingClientRect()
+    useEditorStore.getState().setContextMenu({
+      mode,
+      elementId,
+      x: rect.left + pointer.x,
+      y: rect.top + pointer.y,
+    })
   }
 
   const updateShapePreview = (startX: number, startY: number, pos: { x: number; y: number }) => {
@@ -385,7 +533,14 @@ export function CanvasStage() {
         const node = stage.findOne(`#${el.id}`)
         if (!node) return false
         const box = node.getClientRect({ relativeTo: layer })
-        return rectsIntersect(selRect, box)
+        const pad = el.type === 'arrow' ? ARROW_HIT_STROKE_WIDTH / 2 : 0
+        const hitBox = {
+          x: box.x - pad,
+          y: box.y - pad,
+          width: box.width + pad * 2,
+          height: box.height + pad * 2,
+        }
+        return rectsIntersect(selRect, hitBox)
       })
       .map((el) => el.id)
 
@@ -479,7 +634,8 @@ export function CanvasStage() {
       setElements(newElements)
       useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
       debouncedSave(activeCanvas, newElements)
-      selectElement(el.id)
+      handleSelectElement(el.id)
+      setCurrentTool('select')
     }
   }
 
@@ -497,7 +653,7 @@ export function CanvasStage() {
   return (
     <div
       ref={containerRef}
-      className={`relative flex-1 overflow-hidden ${activeCanvas.gridEnabled ? 'dot-grid' : 'bg-canvas-bg'}${isShiftHandHold ? ' cursor-grab active:cursor-grabbing' : ''}`}
+      className={`relative flex-1 overflow-hidden outline-none ${activeCanvas.gridEnabled ? 'dot-grid' : 'bg-canvas-bg'}${isShiftHandHold || isScrollPanHold ? ' cursor-grab active:cursor-grabbing' : ''}`}
       style={{ backgroundColor: activeCanvas.gridEnabled ? undefined : activeCanvas.background }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -510,7 +666,7 @@ export function CanvasStage() {
         scaleY={zoom}
         x={pan.x}
         y={pan.y}
-        draggable={!isEditingText && !isShiftHandHold && (currentTool === 'hand' || isPanning)}
+        draggable={!isEditingText && !isShiftHandHold && !isScrollPanHold && (currentTool === 'hand' || isPanning)}
         onDragEnd={(e) => {
           if (currentTool === 'hand' || isPanning) {
             setPan({ x: e.target.x(), y: e.target.y() })
@@ -519,17 +675,36 @@ export function CanvasStage() {
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={() => void handleStageMouseUp()}
+        onContextMenu={(e) => {
+          if (e.target !== e.target.getStage()) return
+          e.evt.preventDefault()
+          if (selectedElementIds.length > 0) {
+            openContextMenuAtPointer('selection')
+          }
+        }}
       >
         <Layer>
           {elements.map((el) =>
             renderElement(
               el,
+              elements,
               selectedIds,
               editingTextId,
-              selectElement,
+              handleSelectElement,
               startTextEdit,
               handleElementChange,
               setOpenMarkdownId,
+              (elementId, evt) => {
+                evt.evt.preventDefault()
+                const isInSelection = selectedElementIds.includes(elementId)
+                openContextMenuAtPointer(
+                  isInSelection && selectedElementIds.length > 1 ? 'selection' : 'element',
+                  elementId,
+                )
+              },
+              handleFrameDragEnd,
+              handleFrameTransformEnd,
+              handleSelectFrame,
             ),
           )}
           {selectionPreview && (
@@ -573,6 +748,7 @@ export function CanvasStage() {
           <Transformer
             ref={transformerRef}
             keepRatio={lockAspectRatio}
+            rotateEnabled={!frameSelected}
             enabledAnchors={
               lockAspectRatio
                 ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -580,52 +756,12 @@ export function CanvasStage() {
             }
             boundBoxFunc={(oldBox, newBox) => {
               if (newBox.width < 5 || newBox.height < 5) return oldBox
+              if (frameSelected) {
+                const w = Math.max(FRAME_MIN_WIDTH, Math.min(FRAME_MAX_WIDTH, newBox.width))
+                const h = Math.max(FRAME_MIN_HEIGHT, Math.min(FRAME_MAX_HEIGHT, newBox.height))
+                return { ...newBox, width: w, height: h }
+              }
               return newBox
-            }}
-            onTransformEnd={() => {
-              const tr = transformerRef.current
-              if (!tr) return
-              tr.nodes().forEach((node) => {
-                const id = node.id()
-                if (!id) return
-                const updates: Partial<CanvasElement> = {
-                  x: node.x(),
-                  y: node.y(),
-                  rotation: node.rotation(),
-                }
-                if (node.getClassName() === 'Text') {
-                  const textNode = node as Konva.Text
-                  const scaleX = textNode.scaleX()
-                  if (scaleX !== 1) {
-                    updates.width = textNode.width() * scaleX
-                    textNode.scaleX(1)
-                    textNode.scaleY(1)
-                  }
-                } else if (node.getClassName() === 'Group') {
-                  const el = elements.find((item) => item.id === id)
-                  if (el && (el.type === 'image' || el.type === 'markdown')) {
-                    const scaleX = node.scaleX()
-                    if (scaleX !== 1) {
-                      const aspectRatio = el.width / el.height
-                      const newWidth = Math.max(5, el.width * scaleX)
-                      updates.width = newWidth
-                      updates.height = newWidth / aspectRatio
-                      node.scaleX(1)
-                      node.scaleY(1)
-                    }
-                  } else if (el) {
-                    const scaleX = node.scaleX()
-                    const scaleY = node.scaleY()
-                    if (scaleX !== 1 || scaleY !== 1) {
-                      updates.width = Math.max(5, el.width * scaleX)
-                      updates.height = Math.max(5, el.height * scaleY)
-                      node.scaleX(1)
-                      node.scaleY(1)
-                    }
-                  }
-                }
-                handleElementChange(id, updates)
-              })
             }}
             borderStroke="#5B4DFF"
             anchorStroke="#5B4DFF"
@@ -636,11 +772,11 @@ export function CanvasStage() {
           />
         </Layer>
       </Stage>
+      <CanvasGestureCue />
       {editingTextId && (
         <TextEditOverlay
           elementId={editingTextId}
           stageRef={stageRef}
-          containerRef={containerRef}
           onCommit={(text) => {
             handleElementChange(editingTextId, { text })
             setEditingTextId(null)

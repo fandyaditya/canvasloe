@@ -4,6 +4,7 @@ import { getElementsByCanvas } from '../../db/elementRepo'
 import { useEditorStore } from '../state/editorStore'
 import { useHistoryStore } from '../state/historyStore'
 import { useAutosave } from './useAutosave'
+import { loadMarkdownContentsForElements } from './useMarkdownContent'
 
 export function useCanvasLoader() {
   const { flushSave } = useAutosave()
@@ -26,11 +27,14 @@ export function useCanvasLoader() {
       state.setZoom(1)
       state.setPan({ x: 0, y: 0 })
 
+      const elements = cached ? cached.elements : await getElementsByCanvas(canvasId)
+      const markdownEntries = await loadMarkdownContentsForElements(elements)
+      state.loadMarkdownCache(markdownEntries)
+
       if (cached) {
         state.setElements(cached.elements)
         useHistoryStore.getState().initHistory(canvasId, cached.elements)
       } else {
-        const elements = await getElementsByCanvas(canvasId)
         state.setElements(elements)
         state.cacheCanvas(canvasId, elements)
         useHistoryStore.getState().initHistory(canvasId, elements)

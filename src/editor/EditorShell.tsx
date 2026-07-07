@@ -10,6 +10,10 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useCanvasLoader } from './hooks/useCanvasLoader'
 import { useEditorStore } from './state/editorStore'
 import { MarkdownDetailModal } from './components/MarkdownDetailModal'
+import { ElementContextMenu } from './components/ElementContextMenu'
+import { ConfirmDialog } from './components/ConfirmDialog'
+// OPFS in-app browser — disabled; see LeftSidebar.tsx
+// import { OpfsBrowserPanel } from './components/OpfsBrowserPanel'
 
 export function EditorShell() {
   useKeyboardShortcuts()
@@ -70,6 +74,9 @@ export function EditorShell() {
         </AnimatedSidebarSlot>
       </div>
       <MarkdownDetailModal />
+      <ConfirmDialog />
+      <ElementContextMenu />
+      {/* <OpfsBrowserPanel /> */}
     </div>
   )
 }

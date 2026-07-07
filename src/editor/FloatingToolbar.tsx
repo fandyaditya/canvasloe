@@ -4,6 +4,7 @@ import {
   Circle,
   Droplet,
   FileText,
+  Frame,
   Hand,
   ImagePlus,
   MousePointer2,
@@ -22,12 +23,14 @@ const TOOLS: { id: Tool; icon: typeof MousePointer2; label: string }[] = [
   { id: 'arrow', icon: ArrowUpRight, label: 'Arrow' },
   { id: 'text', icon: Type, label: 'Text' },
   { id: 'markdown', icon: FileText, label: 'Markdown' },
+  { id: 'frame', icon: Frame, label: 'Frame' },
   { id: 'color', icon: Droplet, label: 'Colour palette' },
 ]
 
 export function FloatingToolbar() {
   const currentTool = useEditorStore((s) => s.currentTool)
   const isShiftHandHold = useEditorStore((s) => s.isShiftHandHold)
+  const isScrollPanHold = useEditorStore((s) => s.isScrollPanHold)
   const activeCanvas = useEditorStore((s) => s.activeCanvas)
   const setCurrentTool = useEditorStore((s) => s.setCurrentTool)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -55,7 +58,7 @@ export function FloatingToolbar() {
             title={label}
             onClick={() => setCurrentTool(id)}
             className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-              currentTool === id || (id === 'hand' && isShiftHandHold)
+              currentTool === id || (id === 'hand' && (isShiftHandHold || isScrollPanHold))
                 ? 'bg-primary text-white'
                 : 'text-text-secondary hover:bg-gray-100'
             }`}

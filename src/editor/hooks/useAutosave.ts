@@ -3,6 +3,7 @@ import { saveElements } from '../../db/elementRepo'
 import { updateCanvas } from '../../db/canvasRepo'
 import { useEditorStore } from '../state/editorStore'
 import type { Canvas, CanvasElement } from '../../db/schema'
+import { notifyStorageUsageChanged } from '../../utils/storageUsage'
 
 export function useAutosave() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -15,6 +16,7 @@ export function useAutosave() {
       await updateCanvas(canvas.id, { updatedAt: Date.now() })
       cacheCanvas(canvas.id, elements)
       setSaveStatus('saved')
+      notifyStorageUsageChanged()
     } catch {
       setSaveStatus('error')
     }

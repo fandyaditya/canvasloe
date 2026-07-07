@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react'
 import { EditorShell } from '../editor/EditorShell'
 import { ensureActiveCanvas } from '../db/seed'
+import { migrateToOpfs } from '../db/migrateToOpfs'
 import { useEditorStore } from '../editor/state/editorStore'
 
 export function App() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    void ensureActiveCanvas().then((activeCanvasId) => {
+    void (async () => {
+      await migrateToOpfs()
+      const activeCanvasId = await ensureActiveCanvas()
       if (activeCanvasId) {
         useEditorStore.getState().setActiveCanvasId(activeCanvasId)
         const projectId = localStorage.getItem('activeProjectId')
         if (projectId) useEditorStore.getState().setActiveProject(projectId)
       }
       setReady(true)
-    })
+    })()
   }, [])
 
   if (!ready) {

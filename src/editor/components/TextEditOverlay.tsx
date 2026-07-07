@@ -13,7 +13,6 @@ const weightMap = {
 type TextEditOverlayProps = {
   elementId: string
   stageRef: React.RefObject<Konva.Stage | null>
-  containerRef: React.RefObject<HTMLDivElement | null>
   onCommit: (text: string) => void
   onCancel: () => void
 }
@@ -21,7 +20,6 @@ type TextEditOverlayProps = {
 export function TextEditOverlay({
   elementId,
   stageRef,
-  containerRef,
   onCommit,
   onCancel,
 }: TextEditOverlayProps) {
@@ -37,9 +35,10 @@ export function TextEditOverlay({
   const [style, setStyle] = useState<React.CSSProperties>({ display: 'none' })
 
   useEffect(() => {
+    if (!element) return
     setIsEditingText(true)
     return () => setIsEditingText(false)
-  }, [setIsEditingText])
+  }, [element, setIsEditingText])
 
   useEffect(() => {
     setDraft(element?.text ?? '')
@@ -47,23 +46,21 @@ export function TextEditOverlay({
 
   const updatePosition = () => {
     const stage = stageRef.current
-    const container = containerRef.current
-    if (!stage || !container || !element) return
+    if (!stage || !element) return
 
     const node = stage.findOne(`#${elementId}`) as Konva.Text | undefined
     if (!node) return
 
-    const nodeRect = node.getClientRect()
-    const containerRect = container.getBoundingClientRect()
+    const pos = node.getAbsolutePosition()
     const scale = stage.scaleX()
     const rotation = node.rotation()
     const fontSize = element.fontSize * scale
-    const width = Math.max(nodeRect.width, fontSize * 2)
+    const width = Math.max(element.width * scale, fontSize * 2)
 
     setStyle({
       position: 'absolute',
-      top: nodeRect.y - containerRect.top,
-      left: nodeRect.x - containerRect.left,
+      top: pos.y,
+      left: pos.x,
       width,
       minHeight: fontSize * 1.2,
       fontSize,
@@ -84,7 +81,7 @@ export function TextEditOverlay({
       resize: 'none',
       overflow: 'hidden',
       zIndex: 10,
-      boxSizing: 'content-box',
+      boxSizing: 'border-box',
     })
   }
 

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useEditorStore } from '../state/editorStore'
 import { useHistoryStore } from '../state/historyStore'
 import { useAutosave } from './useAutosave'
-import { duplicateElement, deleteElement } from '../../db/elementRepo'
+import { duplicateElementWithDependents, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
 import { useImageImport } from './useImageImport'
 
 export function useKeyboardShortcuts() {
@@ -46,22 +46,23 @@ export function useKeyboardShortcuts() {
         if (!activeCanvas || selectedElementIds.length !== 1) return
         const el = elements.find((x) => x.id === selectedElementIds[0])
         if (!el) return
-        const copy = await duplicateElement(el)
-        const newElements = [...elements, copy]
+        const copies = await duplicateElementWithDependents(el)
+        const newElements = [...elements, ...copies]
         setElements(newElements)
         useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
         debouncedSave(activeCanvas, newElements)
-        state.setSelectedElementIds([copy.id])
+        state.setSelectedElementIds([copies[copies.length - 1]!.id])
         return
       }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (state.isEditingText) return
         if (!activeCanvas || selectedElementIds.length === 0) return
         e.preventDefault()
         for (const id of selectedElementIds) {
           await deleteElement(id)
         }
-        const newElements = elements.filter((el) => !selectedElementIds.includes(el.id))
+        const newElements = removeElementsFromCanvas(elements, selectedElementIds)
         setElements(newElements)
         useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
         debouncedSave(activeCanvas, newElements)

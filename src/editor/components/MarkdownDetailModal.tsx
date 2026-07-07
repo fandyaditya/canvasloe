@@ -4,10 +4,9 @@ import { FileText, X } from 'lucide-react'
 import type { MarkdownElement } from '../../db/schema'
 import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
-import { useAutosave } from '../hooks/useAutosave'
-import { useHistoryStore } from '../state/historyStore'
 import { MarkdownEditor } from './MarkdownEditor'
 import { MarkdownPreview } from './MarkdownPreview'
+import { useMarkdownContent } from '../hooks/useMarkdownContent'
 import { extractMarkdownTitle, formatLastEdited, markdownCharCount } from '../../utils/markdown'
 
 type Tab = 'preview' | 'edit'
@@ -16,14 +15,12 @@ export function MarkdownDetailModal() {
   const openMarkdownId = useEditorStore((s) => s.openMarkdownId)
   const setOpenMarkdownId = useEditorStore((s) => s.setOpenMarkdownId)
   const elements = useEditorStore((s) => s.elements)
-  const activeCanvas = useEditorStore((s) => s.activeCanvas)
-  const updateElementLocal = useEditorStore((s) => s.updateElementLocal)
-  const { debouncedSave } = useAutosave()
   const [tab, setTab] = useState<Tab>('preview')
 
   const element = elements.find(
     (el): el is MarkdownElement => el.id === openMarkdownId && el.type === 'markdown',
   )
+  const [markdown, setMarkdown] = useMarkdownContent(element?.contentId ?? '')
 
   useEffect(() => {
     if (openMarkdownId && !element) setOpenMarkdownId(null)
@@ -33,18 +30,10 @@ export function MarkdownDetailModal() {
     if (!open) setOpenMarkdownId(null)
   }
 
-  const update = (updates: Partial<MarkdownElement>) => {
-    if (!element || !activeCanvas) return
-    updateElementLocal(element.id, updates)
-    const newElements = useEditorStore.getState().elements
-    useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
-    debouncedSave(activeCanvas, newElements)
-  }
-
   if (!element) return null
 
-  const title = extractMarkdownTitle(element.markdown)
-  const charCount = markdownCharCount(element.markdown)
+  const title = extractMarkdownTitle(markdown)
+  const charCount = markdownCharCount(markdown)
 
   return (
     <Dialog.Root open={openMarkdownId !== null} onOpenChange={handleOpenChange}>
@@ -94,13 +83,13 @@ export function MarkdownDetailModal() {
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {tab === 'edit' ? (
               <MarkdownEditor
-                value={element.markdown}
-                onChange={(markdown) => update({ markdown })}
+                value={markdown}
+                onChange={setMarkdown}
                 minLines={14}
               />
             ) : (
               <MarkdownPreview
-                markdown={element.markdown}
+                markdown={markdown}
                 fontFamily={element.fontFamily}
                 textColor={element.textColor}
                 backgroundColor={element.backgroundColor}

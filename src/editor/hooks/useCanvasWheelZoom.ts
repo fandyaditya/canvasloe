@@ -1,10 +1,9 @@
 import { useEffect, type RefObject } from 'react'
 import { useEditorStore } from '../state/editorStore'
 
-function normalizeWheelDelta(e: WheelEvent, containerHeight: number) {
-  let delta = e.deltaY
-  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) delta *= 16
-  if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) delta *= containerHeight
+function normalizeWheelAxis(delta: number, deltaMode: number, pageSize: number) {
+  if (deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16
+  if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * pageSize
   return delta
 }
 
@@ -14,6 +13,20 @@ export function useCanvasWheelZoom(containerRef: RefObject<HTMLDivElement | null
     if (!container || !enabled) return
 
     let lastPinchDistance: number | null = null
+    let scrollPanExitTimer: ReturnType<typeof setTimeout> | null = null
+
+    const scheduleScrollPanHoldExit = () => {
+      if (scrollPanExitTimer) clearTimeout(scrollPanExitTimer)
+      scrollPanExitTimer = setTimeout(() => {
+        useEditorStore.getState().exitScrollPanHold()
+        scrollPanExitTimer = null
+      }, 150)
+    }
+
+    const beginScrollPan = () => {
+      useEditorStore.getState().enterScrollPanHold()
+      scheduleScrollPanHoldExit()
+    }
 
     const pointerInContainer = (clientX: number, clientY: number) => {
       const rect = container.getBoundingClientRect()
@@ -21,18 +34,33 @@ export function useCanvasWheelZoom(containerRef: RefObject<HTMLDivElement | null
     }
 
     const onWheel = (e: WheelEvent) => {
-      const isPinchGesture = e.ctrlKey || e.metaKey
-      const isWheelZoom = !e.shiftKey && !e.altKey && Math.abs(e.deltaY) >= Math.abs(e.deltaX)
+      if (useEditorStore.getState().isEditingText) return
 
-      if (!isPinchGesture && !isWheelZoom) return
+      const deltaX = normalizeWheelAxis(e.deltaX, e.deltaMode, container.clientWidth)
+      const deltaY = normalizeWheelAxis(e.deltaY, e.deltaMode, container.clientHeight)
+      const isPinchGesture = e.ctrlKey || e.metaKey
+      const shiftHeld = e.shiftKey || useEditorStore.getState().isShiftKeyDown
+      if (e.shiftKey) {
+        useEditorStore.getState().setShiftKeyDown(true)
+      }
+      const isShiftZoom = shiftHeld && !e.altKey && !isPinchGesture
 
       e.preventDefault()
 
-      const delta = normalizeWheelDelta(e, container.clientHeight)
-      const sensitivity = isPinchGesture ? 0.01 : 0.0015
-      const factor = Math.exp(-delta * sensitivity)
       const pointer = pointerInContainer(e.clientX, e.clientY)
-      useEditorStore.getState().zoomAtPoint(factor, pointer)
+
+      if (isPinchGesture || isShiftZoom) {
+        const zoomDelta = Math.abs(deltaY) >= Math.abs(deltaX) ? deltaY : deltaX
+        if (isShiftZoom && zoomDelta === 0) return
+        const sensitivity = isPinchGesture ? 0.01 : 0.0015
+        const factor = Math.exp(-zoomDelta * sensitivity)
+        useEditorStore.getState().zoomAtPoint(factor, pointer)
+        return
+      }
+
+      beginScrollPan()
+      const { pan, setPan } = useEditorStore.getState()
+      setPan({ x: pan.x - deltaX, y: pan.y - deltaY })
     }
 
     const onTouchStart = (e: TouchEvent) => {
@@ -66,6 +94,8 @@ export function useCanvasWheelZoom(containerRef: RefObject<HTMLDivElement | null
     container.addEventListener('touchcancel', onTouchEnd, { passive: true })
 
     return () => {
+      if (scrollPanExitTimer) clearTimeout(scrollPanExitTimer)
+      useEditorStore.getState().exitScrollPanHold()
       container.removeEventListener('wheel', onWheel)
       container.removeEventListener('touchstart', onTouchStart)
       container.removeEventListener('touchmove', onTouchMove)

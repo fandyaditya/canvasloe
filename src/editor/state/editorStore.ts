@@ -21,6 +21,9 @@ type EditorStore = {
   isPanning: boolean
   isShiftHandHold: boolean
   shiftHandPreviousTool: Tool | null
+  isShiftKeyDown: boolean
+  isScrollPanHold: boolean
+  scrollPanPreviousTool: Tool | null
   saveStatus: SaveStatus
   defaultColor: string
   expandedProjects: Set<string>
@@ -29,6 +32,10 @@ type EditorStore = {
   rightSidebarOpen: boolean
   openMarkdownId: string | null
   canvasViewportSize: { width: number; height: number }
+  markdownCache: Map<string, string>
+  markdownCacheVersion: number
+  opfsBrowserOpen: boolean
+  contextMenu: { mode: 'element' | 'selection'; elementId?: string; x: number; y: number } | null
 
   setActiveProject: (id: string | null) => void
   setActiveCanvas: (canvas: Canvas | null) => void
@@ -47,8 +54,11 @@ type EditorStore = {
   setIsDragging: (v: boolean) => void
   setIsEditingText: (v: boolean) => void
   setIsPanning: (v: boolean) => void
+  setShiftKeyDown: (v: boolean) => void
   enterShiftHandHold: () => void
   exitShiftHandHold: () => void
+  enterScrollPanHold: () => void
+  exitScrollPanHold: () => void
   setSaveStatus: (status: SaveStatus) => void
   setDefaultColor: (color: string) => void
   toggleProjectExpanded: (projectId: string) => void
@@ -60,6 +70,12 @@ type EditorStore = {
   toggleRightSidebar: () => void
   setOpenMarkdownId: (id: string | null) => void
   setCanvasViewportSize: (size: { width: number; height: number }) => void
+  setMarkdownContent: (contentId: string, text: string) => void
+  getMarkdownContent: (contentId: string) => string | undefined
+  loadMarkdownCache: (entries: Array<{ contentId: string; text: string }>) => void
+  clearMarkdownCache: () => void
+  setOpfsBrowserOpen: (open: boolean) => void
+  setContextMenu: (menu: { mode: 'element' | 'selection'; elementId?: string; x: number; y: number } | null) => void
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -76,6 +92,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   isPanning: false,
   isShiftHandHold: false,
   shiftHandPreviousTool: null,
+  isShiftKeyDown: false,
+  isScrollPanHold: false,
+  scrollPanPreviousTool: null,
   saveStatus: 'saved',
   defaultColor: '#1E1E1E',
   expandedProjects: new Set<string>(),
@@ -84,6 +103,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   rightSidebarOpen: localStorage.getItem('rightSidebarOpen') !== 'false',
   openMarkdownId: null,
   canvasViewportSize: { width: 800, height: 600 },
+  markdownCache: new Map(),
+  markdownCacheVersion: 0,
+  opfsBrowserOpen: false,
+  contextMenu: null,
 
   setActiveProject: (id) => {
     if (id) localStorage.setItem('activeProjectId', id)
@@ -170,6 +193,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   setIsPanning: (v) => set({ isPanning: v }),
 
+  setShiftKeyDown: (v) => set({ isShiftKeyDown: v }),
+
   enterShiftHandHold: () => {
     const { isShiftHandHold, isEditingText, currentTool } = get()
     if (isShiftHandHold || isEditingText) return
@@ -187,6 +212,28 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       isShiftHandHold: false,
       ...(shiftHandPreviousTool !== null ? { currentTool: shiftHandPreviousTool } : {}),
       shiftHandPreviousTool: null,
+    })
+  },
+
+  enterScrollPanHold: () => {
+    const { isScrollPanHold, isEditingText, currentTool } = get()
+    if (isScrollPanHold || isEditingText) return
+    if (currentTool === 'hand') {
+      set({ isScrollPanHold: true, scrollPanPreviousTool: null })
+      return
+    }
+    set({ isScrollPanHold: true, scrollPanPreviousTool: currentTool, currentTool: 'hand' })
+  },
+
+  exitScrollPanHold: () => {
+    const { isScrollPanHold, scrollPanPreviousTool, currentTool } = get()
+    if (!isScrollPanHold) return
+    set({
+      isScrollPanHold: false,
+      ...(scrollPanPreviousTool !== null && currentTool === 'hand'
+        ? { currentTool: scrollPanPreviousTool }
+        : {}),
+      scrollPanPreviousTool: null,
     })
   },
 
@@ -239,4 +286,28 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   setOpenMarkdownId: (id) => set({ openMarkdownId: id }),
 
   setCanvasViewportSize: (size) => set({ canvasViewportSize: size }),
+
+  setMarkdownContent: (contentId, text) =>
+    set((state) => {
+      const markdownCache = new Map(state.markdownCache)
+      markdownCache.set(contentId, text)
+      return { markdownCache, markdownCacheVersion: state.markdownCacheVersion + 1 }
+    }),
+
+  getMarkdownContent: (contentId) => get().markdownCache.get(contentId),
+
+  loadMarkdownCache: (entries) =>
+    set((state) => {
+      const markdownCache = new Map(state.markdownCache)
+      for (const { contentId, text } of entries) {
+        markdownCache.set(contentId, text)
+      }
+      return { markdownCache, markdownCacheVersion: state.markdownCacheVersion + 1 }
+    }),
+
+  clearMarkdownCache: () => set({ markdownCache: new Map(), markdownCacheVersion: 0 }),
+
+  setOpfsBrowserOpen: (open) => set({ opfsBrowserOpen: open }),
+
+  setContextMenu: (menu) => set({ contextMenu: menu }),
 }))

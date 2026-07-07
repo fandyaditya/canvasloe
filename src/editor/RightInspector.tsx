@@ -6,6 +6,7 @@ import { ShapeInspector } from './inspector/ShapeInspector'
 import { ArrowInspector } from './inspector/ArrowInspector'
 import { PaletteInspector } from './inspector/PaletteInspector'
 import { MarkdownInspector } from './inspector/MarkdownInspector'
+import { FrameInspector } from './inspector/FrameInspector'
 
 export function RightInspector() {
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds)
@@ -31,6 +32,8 @@ export function RightInspector() {
       return <PaletteInspector element={element} />
     case 'markdown':
       return <MarkdownInspector element={element} />
+    case 'frame':
+      return <FrameInspector element={element} />
     default:
       return <EmptyInspector />
   }

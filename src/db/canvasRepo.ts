@@ -1,6 +1,7 @@
 import { db } from './db'
 import type { Canvas } from './schema'
 import { createId } from '../utils/ids'
+import { deleteCanvasMedia, ensureCanvasFolders } from './mediaRepo'
 
 export async function getCanvasesByProject(projectId: string): Promise<Canvas[]> {
   return db.canvases.where('projectId').equals(projectId).sortBy('createdAt')
@@ -29,6 +30,7 @@ export async function createCanvas(
     ...overrides,
   }
   await db.canvases.add(canvas)
+  await ensureCanvasFolders(projectId, canvas.id)
   return canvas
 }
 
@@ -37,7 +39,12 @@ export async function updateCanvas(id: string, updates: Partial<Canvas>): Promis
 }
 
 export async function deleteCanvas(id: string): Promise<void> {
+  const canvas = await db.canvases.get(id)
   await db.elements.where('canvasId').equals(id).delete()
-  await db.assets.where('canvasId').equals(id).delete()
+  if (canvas) {
+    await deleteCanvasMedia(canvas.projectId, id)
+  } else {
+    await db.assets.where('canvasId').equals(id).delete()
+  }
   await db.canvases.delete(id)
 }

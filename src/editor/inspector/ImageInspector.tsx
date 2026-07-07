@@ -4,8 +4,8 @@ import type { ImageElement } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
 import { useHistoryStore } from '../state/historyStore'
-import { duplicateElement, deleteElement } from '../../db/elementRepo'
-import { getAsset, updateAssetBlob } from '../../db/assetRepo'
+import { duplicateElement, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
+import { readMediaBlob, updateImageMedia } from '../../db/assetRepo'
 import { getImageDimensions } from '../../utils/image'
 import { useEffect, useState } from 'react'
 import { getObjectUrl } from '../../utils/objectUrlCache'
@@ -19,9 +19,9 @@ export function ImageInspector({ element }: { element: ImageElement }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    void getAsset(element.assetId).then((asset) => {
-      if (asset) setPreviewUrl(getObjectUrl(asset.id, asset.blob))
-    })
+    void readMediaBlob(element.assetId)
+      .then((blob) => setPreviewUrl(getObjectUrl(element.assetId, blob)))
+      .catch(() => setPreviewUrl(null))
   }, [element.assetId])
 
   const update = (updates: Partial<ImageElement>) => {
@@ -42,7 +42,7 @@ export function ImageInspector({ element }: { element: ImageElement }) {
       if (!file) return
       const blob = file.slice(0, file.size, file.type)
       const dims = await getImageDimensions(blob)
-      await updateAssetBlob(element.assetId, blob, dims.width, dims.height)
+      await updateImageMedia(element.assetId, blob, dims)
       setPreviewUrl(getObjectUrl(element.assetId, blob))
     }
     input.click()
@@ -126,7 +126,7 @@ export function ImageInspector({ element }: { element: ImageElement }) {
         onDelete={async () => {
           if (!activeCanvas) return
           await deleteElement(element.id)
-          const newElements = elements.filter((el) => el.id !== element.id)
+          const newElements = removeElementsFromCanvas(elements, [element.id])
           setElements(newElements)
           useEditorStore.getState().clearSelection()
           useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)

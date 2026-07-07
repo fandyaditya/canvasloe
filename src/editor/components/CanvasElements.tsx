@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Image as KonvaImage, Rect, Circle, Text, Arrow, Line, Group } from 'react-konva'
 import type Konva from 'konva'
-import type { ArrowElement, CanvasElement, ImageElement, MarkdownElement, PaletteElement, ShapeElement, TextElement } from '../../db/schema'
+import type { ArrowElement, CanvasElement, FrameElement, ImageElement, MarkdownElement, PaletteElement, ShapeElement, TextElement } from '../../db/schema'
+import { getChildOrderIndex, getFrameForChild } from '../frame/frameLayout'
 import { extractMarkdownTitle, getCanvasPreviewLines, isMarkdownTruncated } from '../../utils/markdown'
-import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, MARKDOWN_ASPECT_RATIO, IMAGE_CAPTION_FONT_SIZE, IMAGE_CAPTION_GAP, IMAGE_CAPTION_LINE_HEIGHT } from '../../db/schema'
-import { getAsset } from '../../db/assetRepo'
+import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, MARKDOWN_ASPECT_RATIO, IMAGE_CAPTION_FONT_SIZE, IMAGE_CAPTION_GAP, IMAGE_CAPTION_LINE_HEIGHT, ARROW_HIT_STROKE_WIDTH } from '../../db/schema'
+import { readMediaBlob } from '../../db/assetRepo'
 import { getImageElement } from '../../utils/objectUrlCache'
 import { getImageCaptionBlockHeight } from '../../utils/imageCaption'
+import { readMarkdownContent } from '../../db/mediaRepo'
+import { useEditorStore } from '../state/editorStore'
 
 const weightMap = {
   regular: '400',
@@ -202,6 +205,7 @@ export function CanvasArrowElement({
     points: pts,
     stroke: element.stroke,
     strokeWidth: element.strokeWidth,
+    hitStrokeWidth: ARROW_HIT_STROKE_WIDTH,
     opacity: element.opacity * element.strokeOpacity,
     dash: element.dashed ? [8, 4] : undefined,
     draggable: !element.locked,
@@ -230,11 +234,13 @@ export function CanvasImageElement({
   element,
   onSelect,
   onChange,
+  onContextMenu,
 }: {
   element: ImageElement
   isSelected?: boolean
   onSelect: (multi?: boolean) => void
   onChange: (updates: Partial<ImageElement>) => void
+  onContextMenu?: (e: Konva.KonvaEventObject<PointerEvent>) => void
 }) {
   const groupRef = useRef<Konva.Group>(null)
   const [image, setImage] = useState<HTMLImageElement | HTMLCanvasElement | null>(null)
@@ -250,11 +256,8 @@ export function CanvasImageElement({
     setLoadState('loading')
     setImage(null)
 
-    void getAsset(element.assetId)
-      .then((asset) => {
-        if (!asset) throw new Error('Image asset not found')
-        return getImageElement(asset.id, asset.blob)
-      })
+    void readMediaBlob(element.assetId)
+      .then((blob) => getImageElement(element.assetId, blob))
       .then((loaded) => {
         if (cancelled) return
         setImage(loaded)
@@ -285,6 +288,10 @@ export function CanvasImageElement({
       draggable={!element.locked}
       onClick={handleSelect}
       onTap={handleSelect}
+      onContextMenu={(e) => {
+        e.evt.preventDefault()
+        onContextMenu?.(e)
+      }}
       onDragEnd={(e) => onChange({ x: e.target.x(), y: e.target.y() })}
       onTransformEnd={() => {
         const node = groupRef.current
@@ -381,8 +388,7 @@ export function CanvasPaletteElement({
     PALETTE_PADDING * 2 +
     element.colorCount * PALETTE_ROW_HEIGHT +
     (element.colorCount - 1) * PALETTE_ROW_GAP
-  const scaleX = element.width / baseWidth
-  const scaleY = element.height / baseHeight
+  const scale = element.width / baseWidth
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true
@@ -397,8 +403,8 @@ export function CanvasPaletteElement({
       id={element.id}
       x={element.x}
       y={element.y}
-      scaleX={scaleX}
-      scaleY={scaleY}
+      scaleX={scale}
+      scaleY={scale}
       opacity={element.opacity}
       rotation={element.rotation}
       draggable={!element.locked}
@@ -408,11 +414,15 @@ export function CanvasPaletteElement({
       onTransformEnd={() => {
         const node = groupRef.current
         if (!node) return
+        const uniformScale = node.scaleX()
+        const aspectRatio = baseWidth / baseHeight
+        const newWidth = Math.max(40, baseWidth * uniformScale)
+        const newHeight = newWidth / aspectRatio
         onChange({
           x: node.x(),
           y: node.y(),
-          width: Math.max(40, node.width() * node.scaleX()),
-          height: Math.max(40, node.height() * node.scaleY()),
+          width: newWidth,
+          height: newHeight,
           rotation: node.rotation(),
         })
         node.scaleX(1)
@@ -481,17 +491,31 @@ export function CanvasMarkdownElement({
   onSelect,
   onChange,
   onOpenDetail,
+  onContextMenu,
 }: {
   element: MarkdownElement
   isSelected?: boolean
   onSelect: (multi?: boolean) => void
   onChange: (updates: Partial<MarkdownElement>) => void
   onOpenDetail: () => void
+  onContextMenu?: (e: Konva.KonvaEventObject<PointerEvent>) => void
 }) {
   const groupRef = useRef<Konva.Group>(null)
-  const title = extractMarkdownTitle(element.markdown)
-  const previewLines = getCanvasPreviewLines(element.markdown, 4)
-  const truncated = isMarkdownTruncated(element.markdown)
+  const cacheVersion = useEditorStore((s) => s.markdownCacheVersion)
+  const setMarkdownContent = useEditorStore((s) => s.setMarkdownContent)
+  const markdown = useEditorStore.getState().getMarkdownContent(element.contentId) ?? ''
+  void cacheVersion
+
+  useEffect(() => {
+    if (markdown) return
+    void readMarkdownContent(element.contentId)
+      .then((text) => setMarkdownContent(element.contentId, text))
+      .catch(() => setMarkdownContent(element.contentId, ''))
+  }, [element.contentId, markdown, setMarkdownContent])
+
+  const title = extractMarkdownTitle(markdown)
+  const previewLines = getCanvasPreviewLines(markdown, 4)
+  const truncated = isMarkdownTruncated(markdown)
 
   const padding = MARKDOWN_CARD_PADDING
   const radius = MARKDOWN_CARD_RADIUS
@@ -529,6 +553,10 @@ export function CanvasMarkdownElement({
       onDblTap={(e) => {
         e.cancelBubble = true
         onOpenDetail()
+      }}
+      onContextMenu={(e) => {
+        e.evt.preventDefault()
+        onContextMenu?.(e)
       }}
       onDragEnd={(e) => onChange({ x: e.target.x(), y: e.target.y() })}
       onTransformEnd={() => {
@@ -613,22 +641,217 @@ export function CanvasMarkdownElement({
   )
 }
 
+const BADGE_SIZE = 20
+
+function FrameOrderBadge({
+  childId,
+  x,
+  y,
+  order,
+  onSelectFrame,
+}: {
+  childId: string
+  x: number
+  y: number
+  order: number
+  onSelectFrame: () => void
+}) {
+  return (
+    <Group
+      id={`${childId}-frame-badge`}
+      x={x - 4}
+      y={y - 4}
+      onClick={(e) => {
+        e.cancelBubble = true
+        onSelectFrame()
+      }}
+      onTap={(e) => {
+        e.cancelBubble = true
+        onSelectFrame()
+      }}
+    >
+      <Circle x={BADGE_SIZE / 2} y={BADGE_SIZE / 2} radius={BADGE_SIZE / 2} fill="#5B4DFF" />
+      <Text
+        x={0}
+        y={4}
+        width={BADGE_SIZE}
+        text={String(order)}
+        fontSize={11}
+        fontFamily="Inter"
+        fill="#FFFFFF"
+        align="center"
+      />
+    </Group>
+  )
+}
+
+export function CanvasFrameElement({
+  element,
+  onSelect,
+  onFrameDragEnd,
+  onFrameTransformEnd,
+}: {
+  element: FrameElement
+  isSelected?: boolean
+  onSelect: (multi?: boolean) => void
+  onFrameDragEnd: (dx: number, dy: number) => void
+  onFrameTransformEnd: (updates: Partial<FrameElement>, prevBounds: { x: number; y: number; width: number; height: number }) => void
+}) {
+  const shapeRef = useRef<Konva.Rect>(null)
+  const dragStart = useRef({ x: element.x, y: element.y })
+  const childDragStart = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const transformStart = useRef({ x: element.x, y: element.y, width: element.width, height: element.height })
+
+  const syncChildrenDuringDrag = (dx: number, dy: number) => {
+    const stage = shapeRef.current?.getStage()
+    if (!stage) return
+
+    for (const childId of element.childIds) {
+      const start = childDragStart.current.get(childId)
+      const node = stage.findOne(`#${childId}`)
+      if (start && node) node.position({ x: start.x + dx, y: start.y + dy })
+
+      const badgeStart = childDragStart.current.get(`${childId}-badge`)
+      const badge = stage.findOne(`#${childId}-frame-badge`)
+      if (badgeStart && badge) badge.position({ x: badgeStart.x + dx, y: badgeStart.y + dy })
+    }
+  }
+
+  const captureChildDragStart = () => {
+    const stage = shapeRef.current?.getStage()
+    childDragStart.current.clear()
+    if (!stage) return
+
+    for (const childId of element.childIds) {
+      const node = stage.findOne(`#${childId}`)
+      if (node) childDragStart.current.set(childId, { x: node.x(), y: node.y() })
+
+      const badge = stage.findOne(`#${childId}-frame-badge`)
+      if (badge) childDragStart.current.set(`${childId}-badge`, { x: badge.x(), y: badge.y() })
+    }
+  }
+
+  const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    e.cancelBubble = true
+    onSelect(e.evt instanceof MouseEvent && (e.evt.ctrlKey || e.evt.metaKey))
+  }
+
+  return (
+    <Rect
+      ref={shapeRef}
+      id={element.id}
+      x={element.x}
+      y={element.y}
+      width={element.width}
+      height={element.height}
+      fill={element.backgroundColor}
+      cornerRadius={element.radius}
+      opacity={element.opacity}
+      rotation={element.rotation}
+      draggable={!element.locked}
+      onClick={handleSelect}
+      onTap={handleSelect}
+      onDragStart={() => {
+        dragStart.current = { x: element.x, y: element.y }
+        captureChildDragStart()
+      }}
+      onDragMove={(e) => {
+        const dx = e.target.x() - dragStart.current.x
+        const dy = e.target.y() - dragStart.current.y
+        syncChildrenDuringDrag(dx, dy)
+      }}
+      onDragEnd={(e) => {
+        const dx = e.target.x() - dragStart.current.x
+        const dy = e.target.y() - dragStart.current.y
+        if (dx !== 0 || dy !== 0) onFrameDragEnd(dx, dy)
+      }}
+      onTransformStart={() => {
+        transformStart.current = {
+          x: element.x,
+          y: element.y,
+          width: element.width,
+          height: element.height,
+        }
+      }}
+      onTransformEnd={() => {
+        const node = shapeRef.current
+        if (!node) return
+        const scale = node.scaleX()
+        const newWidth = Math.max(5, node.width() * scale)
+        const newHeight = Math.max(5, node.height() * scale)
+        onFrameTransformEnd(
+          {
+            x: node.x(),
+            y: node.y(),
+            width: newWidth,
+            height: newHeight,
+            rotation: node.rotation(),
+          },
+          transformStart.current,
+        )
+        node.scaleX(1)
+        node.scaleY(1)
+      }}
+    />
+  )
+}
+
 export function renderElement(
   element: CanvasElement,
+  allElements: CanvasElement[],
   selectedIds: Set<string>,
   editingTextId: string | null,
   onSelect: (id: string, multi?: boolean) => void,
   onStartTextEdit: (id: string) => void,
   onChange: (id: string, updates: Partial<CanvasElement>) => void,
   onOpenMarkdown: (id: string) => void,
+  onContextMenu?: (elementId: string, e: Konva.KonvaEventObject<PointerEvent>) => void,
+  onFrameDragEnd?: (frameId: string, dx: number, dy: number) => void,
+  onFrameTransformEnd?: (
+    frameId: string,
+    updates: Partial<FrameElement>,
+    prevBounds: { x: number; y: number; width: number; height: number },
+  ) => void,
+  onSelectFrame?: (frameId: string) => void,
 ) {
   const isSelected = selectedIds.has(element.id)
   const handleChange = (updates: Partial<CanvasElement>) => onChange(element.id, updates)
   const handleSelect = (multi?: boolean) => onSelect(element.id, multi)
 
+  const parentFrame = getFrameForChild(element.id, allElements)
+  const badge =
+    parentFrame && onSelectFrame ? (
+      <FrameOrderBadge
+        key={`${element.id}-badge`}
+        childId={element.id}
+        x={element.x}
+        y={element.y}
+        order={getChildOrderIndex(element.id, parentFrame) + 1}
+        onSelectFrame={() => onSelectFrame(parentFrame.id)}
+      />
+    ) : null
+
+  const wrapWithBadge = (node: ReactNode) => (
+    <>
+      {node}
+      {badge}
+    </>
+  )
+
   switch (element.type) {
-    case 'text':
+    case 'frame':
       return (
+        <CanvasFrameElement
+          key={element.id}
+          element={element}
+          isSelected={isSelected}
+          onSelect={handleSelect}
+          onFrameDragEnd={(dx, dy) => onFrameDragEnd?.(element.id, dx, dy)}
+          onFrameTransformEnd={(updates, prev) => onFrameTransformEnd?.(element.id, updates, prev)}
+        />
+      )
+    case 'text':
+      return wrapWithBadge(
         <CanvasTextElement
           key={element.id}
           element={element}
@@ -637,17 +860,17 @@ export function renderElement(
           onSelect={handleSelect}
           onStartEdit={() => onStartTextEdit(element.id)}
           onChange={handleChange}
-        />
+        />,
       )
     case 'shape':
-      return (
+      return wrapWithBadge(
         <CanvasShapeElement
           key={element.id}
           element={element}
           isSelected={isSelected}
           onSelect={handleSelect}
           onChange={handleChange}
-        />
+        />,
       )
     case 'arrow':
       return (
@@ -660,27 +883,28 @@ export function renderElement(
         />
       )
     case 'image':
-      return (
+      return wrapWithBadge(
         <CanvasImageElement
           key={element.id}
           element={element}
           isSelected={isSelected}
           onSelect={handleSelect}
           onChange={handleChange}
-        />
+          onContextMenu={(e) => onContextMenu?.(element.id, e)}
+        />,
       )
     case 'palette':
-      return (
+      return wrapWithBadge(
         <CanvasPaletteElement
           key={element.id}
           element={element}
           isSelected={isSelected}
           onSelect={handleSelect}
           onChange={handleChange}
-        />
+        />,
       )
     case 'markdown':
-      return (
+      return wrapWithBadge(
         <CanvasMarkdownElement
           key={element.id}
           element={element}
@@ -688,7 +912,8 @@ export function renderElement(
           onSelect={handleSelect}
           onChange={handleChange}
           onOpenDetail={() => onOpenMarkdown(element.id)}
-        />
+          onContextMenu={(e) => onContextMenu?.(element.id, e)}
+        />,
       )
     default:
       return null

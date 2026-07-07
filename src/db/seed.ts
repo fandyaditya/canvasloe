@@ -1,6 +1,7 @@
 import { createProject } from './projectRepo'
 import { createCanvas } from './canvasRepo'
 import { createElement } from './elementRepo'
+import { createMarkdownMedia } from './mediaRepo'
 import { db } from './db'
 import type { TextElement, ShapeElement, ArrowElement, MarkdownElement } from './schema'
 import { MARKDOWN_DEFAULT_CONTENT } from './schema'
@@ -137,26 +138,38 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       dashed: false, startHead: false, endHead: true,
       points: [0, 50, 50, 0],
     },
-    // Markdown block
-    {
-      projectId: pid, canvasId: cid, type: 'markdown',
-      x: 700, y: 100, width: 200, height: 168, rotation: 0, opacity: 1, zIndex: 18,
-      markdown: MARKDOWN_DEFAULT_CONTENT,
-      fontFamily: 'Inter', textColor: '#111827', backgroundColor: '#FFFFFF',
-      padding: 16, radius: 12,
-    },
   ]
 
   for (const el of elements) {
     await createElement(el)
   }
 
+  const mdMedia = await createMarkdownMedia(pid, cid, MARKDOWN_DEFAULT_CONTENT)
+  await createElement({
+    projectId: pid,
+    canvasId: cid,
+    type: 'markdown',
+    x: 700,
+    y: 100,
+    width: 200,
+    height: 168,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 18,
+    contentId: mdMedia.id,
+    fontFamily: 'Inter',
+    textColor: '#111827',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    radius: 12,
+  } as Omit<MarkdownElement, 'id' | 'createdAt' | 'updatedAt'>)
+
   localStorage.setItem('activeProjectId', studio.id)
   localStorage.setItem('activeCanvasId', brandDirection.id)
 }
 
 export async function ensureActiveCanvas(): Promise<string | null> {
-  const SEED_VERSION = '7'
+  const SEED_VERSION = '8'
   if (localStorage.getItem('seedVersion') !== SEED_VERSION) {
     await db.transaction('rw', [db.projects, db.canvases, db.elements, db.assets], async () => {
       await db.projects.clear()

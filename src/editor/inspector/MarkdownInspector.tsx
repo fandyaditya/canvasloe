@@ -6,9 +6,10 @@ import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS } from '../../db/schema'
 import { useEditorStore } from '../state/editorStore'
 import { useAutosave } from '../hooks/useAutosave'
 import { useHistoryStore } from '../state/historyStore'
-import { duplicateElement, deleteElement } from '../../db/elementRepo'
+import { duplicateElement, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
 import { MarkdownEditor } from '../components/MarkdownEditor'
 import { MarkdownPreview } from '../components/MarkdownPreview'
+import { useMarkdownContent } from '../hooks/useMarkdownContent'
 
 const FONTS = ['Inter', 'Georgia', 'Arial', 'Helvetica', 'Playfair Display']
 
@@ -64,6 +65,7 @@ export function MarkdownInspector({ element }: { element: MarkdownElement }) {
   const setElements = useEditorStore((s) => s.setElements)
   const setOpenMarkdownId = useEditorStore((s) => s.setOpenMarkdownId)
   const { debouncedSave } = useAutosave()
+  const [markdown, setMarkdown] = useMarkdownContent(element.contentId)
 
   const update = (updates: Partial<MarkdownElement>) => {
     updateElementLocal(element.id, updates)
@@ -99,10 +101,10 @@ export function MarkdownInspector({ element }: { element: MarkdownElement }) {
 
       <div className="space-y-4">
         {tab === 'edit' ? (
-          <MarkdownEditor value={element.markdown} onChange={(markdown) => update({ markdown })} minLines={9} />
+          <MarkdownEditor value={markdown} onChange={setMarkdown} minLines={9} />
         ) : (
           <MarkdownPreview
-            markdown={element.markdown}
+            markdown={markdown}
             fontFamily={element.fontFamily}
             textColor={element.textColor}
             backgroundColor={element.backgroundColor}
@@ -137,7 +139,7 @@ export function MarkdownInspector({ element }: { element: MarkdownElement }) {
         onDelete={async () => {
           if (!activeCanvas) return
           await deleteElement(element.id)
-          const newElements = elements.filter((el) => el.id !== element.id)
+          const newElements = removeElementsFromCanvas(elements, [element.id])
           setElements(newElements)
           useEditorStore.getState().clearSelection()
           useHistoryStore.getState().pushHistory(activeCanvas.id, newElements)
