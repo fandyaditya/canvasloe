@@ -3,7 +3,10 @@ import { Image as KonvaImage, Rect, Circle, Text, Arrow, Line, Group } from 'rea
 import type Konva from 'konva'
 import type { ArrowElement, CanvasElement, FrameElement, ImageElement, MarkdownElement, PaletteElement, ShapeElement, TextElement } from '../../db/schema'
 import { getChildOrderIndex, getFrameForChild } from '../frame/frameLayout'
-import { extractMarkdownTitle, getCanvasPreviewLines, isMarkdownTruncated } from '../../utils/markdown'
+import { extractMarkdownTitle, getCanvasPreviewBlocks, isMarkdownTruncated } from '../../utils/markdown'
+import { layoutMarkdownPreviewBlocks, PREVIEW_FOOTER_RESERVE } from '../../utils/markdownCanvasLayout'
+import { estimateWrappedTextHeight } from '../../utils/textMeasure'
+import { MarkdownCanvasPreviewItems } from './MarkdownCanvasPreview'
 import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, MARKDOWN_ASPECT_RATIO, IMAGE_CAPTION_FONT_SIZE, IMAGE_CAPTION_GAP, IMAGE_CAPTION_LINE_HEIGHT, ARROW_HIT_STROKE_WIDTH, FRAME_TITLE_FONT_SIZE, getFrameTitleNotchLayout } from '../../db/schema'
 import { readMediaBlob } from '../../db/assetRepo'
 import { getImageElement } from '../../utils/objectUrlCache'
@@ -546,19 +549,33 @@ export function CanvasMarkdownElement({
   }, [element.contentId, markdown, setMarkdownContent])
 
   const title = extractMarkdownTitle(markdown)
-  const previewLines = getCanvasPreviewLines(markdown, 4)
   const truncated = isMarkdownTruncated(markdown)
 
   const padding = MARKDOWN_CARD_PADDING
   const radius = MARKDOWN_CARD_RADIUS
   const iconSize = 14
+  const titleFontSize = 13
   const contentX = padding
+  const contentWidth = element.width - padding * 2
   const iconY = padding
   const titleY = iconY + iconSize + 10
-  const previewStartY = titleY + 20
+  const titleHeight = estimateWrappedTextHeight(title, contentWidth, titleFontSize, {
+    fontFamily: element.fontFamily,
+    fontStyle: 'bold',
+    lineHeight: 1,
+  })
+  const previewStartY = titleY + titleHeight + 8
   const footerY = element.height - padding - 12
-  const previewWidth = element.width - padding * 2
-  const previewHeight = footerY - previewStartY - (truncated ? 14 : 6)
+  const previewMaxHeight = Math.max(0, footerY - previewStartY - (truncated ? PREVIEW_FOOTER_RESERVE : 6))
+  const previewBlocks = getCanvasPreviewBlocks(markdown, 4)
+  const previewItems = layoutMarkdownPreviewBlocks(
+    previewBlocks,
+    contentX,
+    previewStartY,
+    contentWidth,
+    element.fontFamily,
+    previewMaxHeight,
+  )
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true
@@ -635,28 +652,25 @@ export function CanvasMarkdownElement({
       <Text
         x={contentX}
         y={titleY}
-        width={element.width - padding * 2}
+        width={contentWidth}
         text={title}
         fontFamily={element.fontFamily}
-        fontSize={13}
+        fontSize={titleFontSize}
         fontStyle="bold"
         fill={element.textColor}
+        wrap="word"
         listening={false}
       />
-      {previewLines.length > 0 && (
-        <Text
-          x={contentX}
-          y={previewStartY}
-          width={previewWidth}
-          height={Math.max(0, previewHeight)}
-          text={previewLines.join('\n')}
-          fontFamily={element.fontFamily}
-          fontSize={10}
-          lineHeight={1.5}
-          fill="#6B7280"
-          wrap="word"
+      {previewItems.length > 0 && (
+        <Group
+          clipX={contentX}
+          clipY={previewStartY}
+          clipWidth={contentWidth}
+          clipHeight={previewMaxHeight}
           listening={false}
-        />
+        >
+          <MarkdownCanvasPreviewItems items={previewItems} />
+        </Group>
       )}
       {truncated && (
         <Text

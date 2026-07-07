@@ -13,7 +13,10 @@ import {
 import { readMediaBlob } from '../../db/mediaRepo'
 import { getImageElement } from '../../utils/objectUrlCache'
 import { getImageCaptionBlockHeight } from '../../utils/imageCaption'
-import { extractMarkdownTitle, getCanvasPreviewLines } from '../../utils/markdown'
+import { extractMarkdownTitle, getCanvasPreviewBlocks, isMarkdownTruncated } from '../../utils/markdown'
+import { layoutMarkdownPreviewBlocks, PREVIEW_FOOTER_RESERVE } from '../../utils/markdownCanvasLayout'
+import { estimateWrappedTextHeight } from '../../utils/textMeasure'
+import { addMarkdownPreviewItemsToGroup } from '../components/MarkdownCanvasPreview'
 import { getChildOrderIndex, normalizeFrame } from './frameLayout'
 
 const BADGE_SIZE = 20
@@ -233,8 +236,22 @@ function drawPalette(layer: Konva.Layer, el: PaletteElement, x: number, y: numbe
 
 function drawMarkdown(layer: Konva.Layer, el: MarkdownElement, markdown: string, x: number, y: number) {
   const title = extractMarkdownTitle(markdown)
-  const previewLines = getCanvasPreviewLines(markdown, 4)
+  const previewBlocks = getCanvasPreviewBlocks(markdown, 4)
   const padding = MARKDOWN_CARD_PADDING
+  const iconSize = 14
+  const titleFontSize = 13
+  const contentWidth = el.width - padding * 2
+  const iconY = padding
+  const titleY = iconY + iconSize + 10
+  const titleHeight = estimateWrappedTextHeight(title, contentWidth, titleFontSize, {
+    fontFamily: el.fontFamily,
+    fontStyle: 'bold',
+    lineHeight: 1,
+  })
+  const previewStartY = titleY + titleHeight + 8
+  const truncated = isMarkdownTruncated(markdown)
+  const footerY = el.height - padding - 12
+  const previewMaxHeight = Math.max(0, footerY - previewStartY - (truncated ? PREVIEW_FOOTER_RESERVE : 6))
   const g = new Konva.Group({ x, y, opacity: el.opacity, rotation: el.rotation })
   g.add(
     new Konva.Rect({
@@ -249,30 +266,32 @@ function drawMarkdown(layer: Konva.Layer, el: MarkdownElement, markdown: string,
   g.add(
     new Konva.Text({
       x: padding,
-      y: padding + 24,
-      width: el.width - padding * 2,
+      y: titleY,
+      width: contentWidth,
       text: title,
       fontFamily: el.fontFamily,
-      fontSize: 13,
+      fontSize: titleFontSize,
       fontStyle: 'bold',
       fill: el.textColor,
+      wrap: 'word',
     }),
   )
-  if (previewLines.length > 0) {
-    g.add(
-      new Konva.Text({
-        x: padding,
-        y: padding + 48,
-        width: el.width - padding * 2,
-        text: previewLines.join('\n'),
-        fontFamily: el.fontFamily,
-        fontSize: 10,
-        lineHeight: 1.5,
-        fill: '#6B7280',
-        wrap: 'word',
-      }),
-    )
-  }
+  const previewGroup = new Konva.Group({
+    clipX: padding,
+    clipY: previewStartY,
+    clipWidth: contentWidth,
+    clipHeight: previewMaxHeight,
+  })
+  const previewItems = layoutMarkdownPreviewBlocks(
+    previewBlocks,
+    padding,
+    previewStartY,
+    contentWidth,
+    el.fontFamily,
+    previewMaxHeight,
+  )
+  addMarkdownPreviewItemsToGroup(previewGroup, Konva, previewItems)
+  g.add(previewGroup)
   layer.add(g)
 }
 

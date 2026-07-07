@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useEditorStore } from '../state/editorStore'
 import { useHistoryStore } from '../state/historyStore'
 import { useAutosave } from './useAutosave'
@@ -9,16 +9,30 @@ import {
   pasteElementsFromClipboard,
 } from '../clipboard/elementClipboard'
 import { loadMarkdownContentsForElements } from './useMarkdownContent'
-import { useImageImport } from './useImageImport'
+import { useCanvasImport } from './useCanvasImport'
+import { getCanvasViewportCenter } from '../../utils/canvasCoords'
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+    return true
+  }
+  return false
+}
 
 export function useKeyboardShortcuts() {
   const { debouncedSave } = useAutosave()
-  const { addImage } = useImageImport()
+  const { importClipboardData } = useCanvasImport()
+  const skipNextPasteRef = useRef(false)
 
   useEffect(() => {
+    const pasteAtViewportCenter = () => {
+      const state = useEditorStore.getState()
+      return getCanvasViewportCenter(state.canvasViewportSize, state.pan, state.zoom)
+    }
+
     const handleKeyDown = async (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      if (isEditableTarget(e.target)) return
 
       const state = useEditorStore.getState()
       const { activeCanvas, elements, selectedElementIds, setElements, clearSelection, setCurrentTool } = state
@@ -112,49 +126,66 @@ export function useKeyboardShortcuts() {
       }
 
       if (mod && e.key === 'v') {
-        e.preventDefault()
-        if (activeCanvas && hasElementClipboard()) {
-          const centerX =
-            (window.innerWidth - 580) / 2 / state.zoom - state.pan.x
-          const centerY =
-            (window.innerHeight - 64) / 2 / state.zoom - state.pan.y
-          const result = await pasteElementsFromClipboard(
-            activeCanvas.projectId,
-            activeCanvas.id,
-            elements,
-            { x: centerX, y: centerY },
-          )
-          if (result) {
-            const markdownEntries = await loadMarkdownContentsForElements(result.elements)
-            state.loadMarkdownCache(markdownEntries)
-            setElements(result.elements)
-            useHistoryStore.getState().pushHistory(activeCanvas.id, result.elements)
-            debouncedSave(activeCanvas, result.elements)
-            state.setSelectedElementIds(result.selectedIds)
-          }
-          return
-        }
+        if (!activeCanvas || !hasElementClipboard()) return
 
-        try {
-          const items = await navigator.clipboard.read()
-          for (const item of items) {
-            const imageType = item.types.find((t) => t.startsWith('image/'))
-            if (imageType) {
-              const blob = await item.getType(imageType)
-              const file = new File([blob], 'pasted.png', { type: imageType })
-              const centerX = (window.innerWidth - 580) / 2 / state.zoom - state.pan.x
-              const centerY = (window.innerHeight - 64) / 2 / state.zoom - state.pan.y
-              await addImage(file, centerX, centerY)
-              return
-            }
-          }
-        } catch {
-          // clipboard access denied
-        }
+        e.preventDefault()
+        skipNextPasteRef.current = true
+
+        const center = pasteAtViewportCenter()
+        const result = await pasteElementsFromClipboard(
+          activeCanvas.projectId,
+          activeCanvas.id,
+          elements,
+          center,
+        )
+        if (!result) return
+
+        const markdownEntries = await loadMarkdownContentsForElements(result.elements)
+        state.loadMarkdownCache(markdownEntries)
+        setElements(result.elements)
+        useHistoryStore.getState().pushHistory(activeCanvas.id, result.elements)
+        debouncedSave(activeCanvas, result.elements)
+        state.setSelectedElementIds(result.selectedIds)
+      }
+    }
+
+    const handlePaste = async (e: ClipboardEvent) => {
+      if (skipNextPasteRef.current) {
+        skipNextPasteRef.current = false
+        return
+      }
+
+      if (isEditableTarget(e.target)) return
+      if (useEditorStore.getState().isEditingText) return
+
+      const { activeCanvas } = useEditorStore.getState()
+      if (!activeCanvas || !e.clipboardData) return
+
+      const hasImportableData =
+        e.clipboardData.files.length > 0 ||
+        Array.from(e.clipboardData.items).some(
+          (item) => item.type.startsWith('image/') || item.type === 'text/plain',
+        ) ||
+        e.clipboardData.getData('text/plain').trim().length > 0
+
+      if (!hasImportableData) return
+
+      e.preventDefault()
+
+      try {
+        const center = pasteAtViewportCenter()
+        await importClipboardData(e.clipboardData, center.x, center.y)
+      } catch (err) {
+        console.error('Failed to paste external content:', err)
+        useEditorStore.getState().setSaveStatus('error')
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [debouncedSave, addImage])
+    window.addEventListener('paste', handlePaste)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('paste', handlePaste)
+    }
+  }, [debouncedSave, importClipboardData])
 }

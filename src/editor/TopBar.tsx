@@ -1,4 +1,4 @@
-import { Check, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
+import { Check, Minus, Plus, Redo2, RotateCcw, Undo2 } from 'lucide-react'
 import { updateCanvas } from '../db/canvasRepo'
 import { useEditorStore } from './state/editorStore'
 import { useHistoryStore } from './state/historyStore'
@@ -43,6 +43,9 @@ export function TopBar() {
     })
   }
 
+  const zoomPercent = Math.round(zoom * 100)
+  const showZoomReset = zoomPercent !== 100
+
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-panel-border bg-white px-4">
       <div className="flex items-center gap-3">
@@ -84,8 +87,19 @@ export function TopBar() {
             <Minus className="h-4 w-4" />
           </button>
           <span className="min-w-[48px] text-center text-sm text-text-secondary">
-            {Math.round(zoom * 100)}%
+            {zoomPercent}%
           </span>
+          {showZoomReset && (
+            <button
+              type="button"
+              title="Reset zoom to 100%"
+              aria-label="Reset zoom to 100%"
+              onClick={() => setZoom(1)}
+              className="flex h-8 w-8 items-center justify-center text-text-secondary hover:bg-gray-50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setZoom(zoom * 1.1)}
