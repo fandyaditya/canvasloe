@@ -16,8 +16,12 @@ import { createProject, deleteProject, updateProject } from '../db/projectRepo'
 import { createCanvas, deleteCanvas } from '../db/canvasRepo'
 import { useEditorStore } from './state/editorStore'
 import { useCanvasLoader } from './hooks/useCanvasLoader'
-import { formatBytes, getStorageUsage } from '../utils/image'
-import { subscribeStorageUsage } from '../utils/storageUsage'
+import {
+  formatBytes,
+  getStorageBreakdown,
+  subscribeStorageUsage,
+  type StorageBreakdown,
+} from '../utils/storageUsage'
 import { confirmDelete, promptInput } from '../utils/confirmDelete'
 import { InlineEditable } from './components/InlineEditable'
 
@@ -31,11 +35,11 @@ export function LeftSidebar() {
   // OPFS browser hidden — native Finder/Explorer cannot open OPFS from a web app.
   // const setOpfsBrowserOpen = useEditorStore((s) => s.setOpfsBrowserOpen)
   const { loadCanvas } = useCanvasLoader()
-  const [storageUsed, setStorageUsed] = useState(0)
+  const [storage, setStorage] = useState<StorageBreakdown | null>(null)
 
   useEffect(() => {
     const refresh = () => {
-      void getStorageUsage().then(({ used }) => setStorageUsed(used))
+      void getStorageBreakdown().then(setStorage)
     }
     refresh()
     return subscribeStorageUsage(refresh)
@@ -196,9 +200,27 @@ export function LeftSidebar() {
         <div className="mb-3 rounded-xl border border-panel-border bg-gray-50 p-3">
           <div className="mb-1 flex items-center gap-2 text-xs font-medium text-text-secondary">
             <HardDrive className="h-3.5 w-3.5" />
-            Local Storage
+            Browser Storage
           </div>
-          <div className="text-xs text-text-secondary">{formatBytes(storageUsed)} used</div>
+          <div className="text-xs text-text-secondary">
+            {storage ? `${formatBytes(storage.total)} used` : 'Calculating…'}
+          </div>
+          {storage && (
+            <dl className="mt-2 space-y-0.5 text-[11px] text-text-secondary">
+              <div className="flex justify-between gap-2">
+                <dt>IndexedDB</dt>
+                <dd>{formatBytes(storage.indexedDb)}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt>OPFS</dt>
+                <dd>{formatBytes(storage.opfs)}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt>localStorage</dt>
+                <dd>{formatBytes(storage.localStorage)}</dd>
+              </div>
+            </dl>
+          )}
         </div>
         {/* OPFS in-app browser — disabled; re-enable with onClick={() => setOpfsBrowserOpen(true)} */}
         {/* <button

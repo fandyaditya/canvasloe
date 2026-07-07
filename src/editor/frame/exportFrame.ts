@@ -6,12 +6,15 @@ import {
   IMAGE_CAPTION_FONT_SIZE,
   IMAGE_CAPTION_GAP,
   IMAGE_CAPTION_LINE_HEIGHT,
+  FRAME_TITLE_FONT_SIZE,
+  FRAME_TITLE_FLOAT_GAP,
+  getFrameTitleNotchLayout,
 } from '../../db/schema'
 import { readMediaBlob } from '../../db/mediaRepo'
 import { getImageElement } from '../../utils/objectUrlCache'
 import { getImageCaptionBlockHeight } from '../../utils/imageCaption'
 import { extractMarkdownTitle, getCanvasPreviewLines } from '../../utils/markdown'
-import { getChildOrderIndex } from './frameLayout'
+import { getChildOrderIndex, normalizeFrame } from './frameLayout'
 
 const BADGE_SIZE = 20
 const EXPORT_EDGE_PADDING = 8
@@ -30,10 +33,30 @@ const PALETTE_ROW_GAP = 8
 const PALETTE_TEXT_GAP = 4
 const PALETTE_ROW_HEIGHT = PALETTE_SWATCH_HEIGHT + PALETTE_TEXT_GAP + 12
 
-function relPos(frame: FrameElement, el: CanvasElement, edgePad: number) {
+function drawTitleNotch(layer: Konva.Layer, frame: FrameElement, edgePad: number, topExtra: number) {
+  const normalized = normalizeFrame(frame)
+  const layout = getFrameTitleNotchLayout(normalized)
+  if (!layout) return
+
+  layer.add(
+    new Konva.Text({
+      x: layout.x - frame.x + edgePad,
+      y: layout.y - frame.y + edgePad + topExtra,
+      width: layout.width,
+      text: layout.title,
+      fontSize: FRAME_TITLE_FONT_SIZE,
+      fontFamily: 'Inter',
+      fontStyle: 'bold',
+      fill: normalized.titleColor,
+      align: 'center',
+    }),
+  )
+}
+
+function relPos(frame: FrameElement, el: CanvasElement, edgePad: number, topExtra: number) {
   return {
     x: el.x - frame.x + edgePad,
-    y: el.y - frame.y + edgePad,
+    y: el.y - frame.y + edgePad + topExtra,
   }
 }
 
@@ -258,9 +281,12 @@ export async function exportFrameToPng(
   elements: CanvasElement[],
   markdownByContentId: Map<string, string>,
 ): Promise<Blob> {
+  const normalized = normalizeFrame(frame)
   const pad = EXPORT_EDGE_PADDING
+  const hasNotch = Boolean(getFrameTitleNotchLayout(normalized))
+  const topExtra = hasNotch ? FRAME_TITLE_FONT_SIZE + FRAME_TITLE_FLOAT_GAP : 0
   const width = frame.width + pad * 2
-  const height = frame.height + pad * 2
+  const height = frame.height + pad * 2 + topExtra
 
   const container = document.createElement('div')
   const stage = new Konva.Stage({ container, width, height })
@@ -270,7 +296,7 @@ export async function exportFrameToPng(
   layer.add(
     new Konva.Rect({
       x: pad,
-      y: pad,
+      y: pad + topExtra,
       width: frame.width,
       height: frame.height,
       fill: frame.backgroundColor,
@@ -279,11 +305,13 @@ export async function exportFrameToPng(
     }),
   )
 
-  for (let i = 0; i < frame.childIds.length; i++) {
-    const childId = frame.childIds[i]!
+  drawTitleNotch(layer, normalized, pad, topExtra)
+
+  for (let i = 0; i < (normalized.childIds ?? []).length; i++) {
+    const childId = normalized.childIds[i]!
     const child = elements.find((el) => el.id === childId)
     if (!child) continue
-    const { x, y } = relPos(frame, child, pad)
+    const { x, y } = relPos(normalized, child, pad, topExtra)
 
     switch (child.type) {
       case 'image':
@@ -305,7 +333,7 @@ export async function exportFrameToPng(
         break
     }
 
-    drawBadge(layer, x, y, getChildOrderIndex(childId, frame) + 1)
+    drawBadge(layer, x, y, getChildOrderIndex(childId, normalized) + 1)
   }
 
   layer.draw()

@@ -6,6 +6,7 @@ import {
   deleteDirectory,
   deleteFile,
   ensureDirectory,
+  listAllOpfsFilePaths,
   readFile,
   readText,
   writeFile,
@@ -134,6 +135,32 @@ export async function readMarkdownContent(id: string): Promise<string> {
   return readText(asset.opfsPath)
 }
 
+export async function duplicateMediaAsset(
+  sourceId: string,
+  projectId: string,
+  canvasId: string,
+): Promise<string> {
+  const asset = await db.assets.get(sourceId)
+  if (!asset) throw new Error('Media not found')
+
+  if (asset.kind === 'image') {
+    const blob = await readFile(asset.opfsPath)
+    const copy = await createImageMedia(projectId, canvasId, blob, {
+      width: asset.width ?? 0,
+      height: asset.height ?? 0,
+    })
+    return copy.id
+  }
+
+  if (asset.kind === 'markdown') {
+    const text = await readText(asset.opfsPath)
+    const copy = await createMarkdownMedia(projectId, canvasId, text)
+    return copy.id
+  }
+
+  throw new Error(`Unsupported media kind: ${asset.kind}`)
+}
+
 export async function isMediaReferenced(id: string): Promise<boolean> {
   const imageRefs = await db.elements.filter((el) => el.type === 'image' && el.assetId === id).count()
   if (imageRefs > 0) return true
@@ -166,6 +193,35 @@ export async function deleteMedia(id: string): Promise<void> {
   }
   await db.assets.delete(id)
   touchStorageUsage()
+}
+
+export async function purgeOrphanedOpfs(): Promise<{ removedFiles: number; freedBytes: number }> {
+  const files = await listAllOpfsFilePaths()
+  if (files.length === 0) return { removedFiles: 0, freedBytes: 0 }
+
+  const assets = await db.assets.toArray()
+  const knownPaths = new Set(assets.map((asset) => asset.opfsPath))
+
+  let removedFiles = 0
+  let freedBytes = 0
+
+  for (const path of files) {
+    if (knownPaths.has(path)) continue
+    try {
+      const file = await readFile(path)
+      freedBytes += file.size
+      await deleteFile(path)
+      removedFiles++
+    } catch {
+      // File may already be gone
+    }
+  }
+
+  if (removedFiles > 0) {
+    touchStorageUsage()
+  }
+
+  return { removedFiles, freedBytes }
 }
 
 export async function deleteCanvasMedia(projectId: string, canvasId: string): Promise<void> {

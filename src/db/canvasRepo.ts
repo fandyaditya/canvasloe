@@ -1,7 +1,7 @@
 import { db } from './db'
 import type { Canvas } from './schema'
 import { createId } from '../utils/ids'
-import { deleteCanvasMedia, ensureCanvasFolders } from './mediaRepo'
+import { deleteCanvasMedia } from './mediaRepo'
 
 export async function getCanvasesByProject(projectId: string): Promise<Canvas[]> {
   return db.canvases.where('projectId').equals(projectId).sortBy('createdAt')
@@ -30,7 +30,6 @@ export async function createCanvas(
     ...overrides,
   }
   await db.canvases.add(canvas)
-  await ensureCanvasFolders(projectId, canvas.id)
   return canvas
 }
 

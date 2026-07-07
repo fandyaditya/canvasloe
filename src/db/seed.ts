@@ -3,6 +3,7 @@ import { createCanvas } from './canvasRepo'
 import { createElement } from './elementRepo'
 import { createMarkdownMedia } from './mediaRepo'
 import { db } from './db'
+import { clearOpfsMedia } from '../storage/opfs'
 import type { TextElement, ShapeElement, ArrowElement, MarkdownElement } from './schema'
 import { MARKDOWN_DEFAULT_CONTENT } from './schema'
 
@@ -171,6 +172,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
 export async function ensureActiveCanvas(): Promise<string | null> {
   const SEED_VERSION = '8'
   if (localStorage.getItem('seedVersion') !== SEED_VERSION) {
+    await clearOpfsMedia()
     await db.transaction('rw', [db.projects, db.canvases, db.elements, db.assets], async () => {
       await db.projects.clear()
       await db.canvases.clear()

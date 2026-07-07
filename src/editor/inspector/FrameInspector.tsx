@@ -114,6 +114,40 @@ export function FrameInspector({ element }: { element: FrameElement }) {
 
       <div className="space-y-4">
         <div>
+          <SectionLabel>Infographic</SectionLabel>
+          <div className="space-y-3">
+            <label className="block text-xs text-text-secondary">
+              Title
+              <input
+                type="text"
+                value={element.title ?? ''}
+                onChange={(e) => updateFrame({ title: e.target.value })}
+                placeholder="e.g. How it works"
+                className="mt-1 w-full rounded-lg border border-panel-border px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block text-xs text-text-secondary">
+              Title color
+              <input
+                type="color"
+                value={element.titleColor ?? '#111827'}
+                onChange={(e) => updateFrame({ titleColor: e.target.value })}
+                className="mt-1 h-9 w-full cursor-pointer rounded-lg border border-panel-border"
+              />
+            </label>
+            {children.length > 1 && (
+              <button
+                type="button"
+                onClick={() => updateFrame({ columns: children.length })}
+                className="w-full rounded-lg border border-panel-border px-3 py-2 text-sm text-text-secondary hover:bg-gray-50"
+              >
+                Arrange in a row
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div>
           <SectionLabel>Children ({children.length})</SectionLabel>
           {children.length === 0 ? (
             <p className="text-sm text-text-secondary">Drag elements onto the frame to add them.</p>

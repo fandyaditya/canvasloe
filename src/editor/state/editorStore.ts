@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Canvas, CanvasElement, SaveStatus, Tool } from '../../db/schema'
+import { normalizeCanvasElements } from '../frame/frameLayout'
 
 type CanvasCache = {
   canvasId: string
@@ -129,7 +130,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set({ activeCanvasId: id })
   },
 
-  setElements: (elements) => set({ elements }),
+  setElements: (elements) => set({ elements: normalizeCanvasElements(elements) }),
 
   updateElementLocal: (id, updates) =>
     set((state) => ({

@@ -3,6 +3,12 @@ import { useEditorStore } from '../state/editorStore'
 import { useHistoryStore } from '../state/historyStore'
 import { useAutosave } from './useAutosave'
 import { duplicateElementWithDependents, deleteElement, removeElementsFromCanvas } from '../../db/elementRepo'
+import {
+  copyElementsToClipboard,
+  hasElementClipboard,
+  pasteElementsFromClipboard,
+} from '../clipboard/elementClipboard'
+import { loadMarkdownContentsForElements } from './useMarkdownContent'
 import { useImageImport } from './useImageImport'
 
 export function useKeyboardShortcuts() {
@@ -93,8 +99,42 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      if (mod && e.key === 'c') {
+        if (!activeCanvas || selectedElementIds.length === 0) return
+        e.preventDefault()
+        copyElementsToClipboard(
+          elements,
+          selectedElementIds,
+          activeCanvas.id,
+          activeCanvas.projectId,
+        )
+        return
+      }
+
       if (mod && e.key === 'v') {
         e.preventDefault()
+        if (activeCanvas && hasElementClipboard()) {
+          const centerX =
+            (window.innerWidth - 580) / 2 / state.zoom - state.pan.x
+          const centerY =
+            (window.innerHeight - 64) / 2 / state.zoom - state.pan.y
+          const result = await pasteElementsFromClipboard(
+            activeCanvas.projectId,
+            activeCanvas.id,
+            elements,
+            { x: centerX, y: centerY },
+          )
+          if (result) {
+            const markdownEntries = await loadMarkdownContentsForElements(result.elements)
+            state.loadMarkdownCache(markdownEntries)
+            setElements(result.elements)
+            useHistoryStore.getState().pushHistory(activeCanvas.id, result.elements)
+            debouncedSave(activeCanvas, result.elements)
+            state.setSelectedElementIds(result.selectedIds)
+          }
+          return
+        }
+
         try {
           const items = await navigator.clipboard.read()
           for (const item of items) {

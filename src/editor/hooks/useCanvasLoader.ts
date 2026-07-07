@@ -5,6 +5,7 @@ import { useEditorStore } from '../state/editorStore'
 import { useHistoryStore } from '../state/historyStore'
 import { useAutosave } from './useAutosave'
 import { loadMarkdownContentsForElements } from './useMarkdownContent'
+import { normalizeCanvasElements } from '../frame/frameLayout'
 
 export function useCanvasLoader() {
   const { flushSave } = useAutosave()
@@ -27,7 +28,8 @@ export function useCanvasLoader() {
       state.setZoom(1)
       state.setPan({ x: 0, y: 0 })
 
-      const elements = cached ? cached.elements : await getElementsByCanvas(canvasId)
+      const rawElements = cached ? cached.elements : await getElementsByCanvas(canvasId)
+      const elements = normalizeCanvasElements(rawElements)
       const markdownEntries = await loadMarkdownContentsForElements(elements)
       state.loadMarkdownCache(markdownEntries)
 

@@ -2,10 +2,13 @@ import { createElement } from '../../db/elementRepo'
 import type { Canvas, CanvasElement, FrameElement } from '../../db/schema'
 import {
   FRAME_DEFAULT_BACKGROUND,
+  FRAME_DEFAULT_CONNECTOR_COLOR,
+  FRAME_DEFAULT_CONNECTOR_STROKE_WIDTH,
   FRAME_DEFAULT_GAP,
   FRAME_DEFAULT_PADDING,
   FRAME_DEFAULT_RADIUS,
   FRAME_DEFAULT_SIZE,
+  FRAME_DEFAULT_TITLE_COLOR,
   getFrameAspectRatio,
 } from '../../db/schema'
 import {
@@ -44,6 +47,11 @@ export function buildEmptyFrameElement(
     columns: 0,
     childIds: [],
     aspectRatio: getFrameAspectRatio(width, height),
+    title: '',
+    titleColor: FRAME_DEFAULT_TITLE_COLOR,
+    showConnectors: false,
+    connectorColor: FRAME_DEFAULT_CONNECTOR_COLOR,
+    connectorStrokeWidth: FRAME_DEFAULT_CONNECTOR_STROKE_WIDTH,
   }
 }
 
@@ -140,6 +148,11 @@ export async function createFrameFromSelection(
     columns: 0,
     childIds,
     aspectRatio: getFrameAspectRatio(bounds.width + padding * 2, bounds.height + padding * 2),
+    title: '',
+    titleColor: FRAME_DEFAULT_TITLE_COLOR,
+    showConnectors: false,
+    connectorColor: FRAME_DEFAULT_CONNECTOR_COLOR,
+    connectorStrokeWidth: FRAME_DEFAULT_CONNECTOR_STROKE_WIDTH,
   }
 
   const frame = (await createElement(draft)) as FrameElement

@@ -26,19 +26,3 @@ export function getImageDimensions(blob: Blob): Promise<{ width: number; height:
   })
 }
 
-export async function getStorageUsage(): Promise<{ used: number; quota: number }> {
-  if (navigator.storage?.estimate) {
-    const estimate = await navigator.storage.estimate()
-    return {
-      used: estimate.usage ?? 0,
-      quota: estimate.quota ?? 1024 * 1024 * 1024,
-    }
-  }
-  return { used: 0, quota: 1024 * 1024 * 1024 }
-}
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}

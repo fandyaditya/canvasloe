@@ -4,7 +4,7 @@ import type Konva from 'konva'
 import type { ArrowElement, CanvasElement, FrameElement, ImageElement, MarkdownElement, PaletteElement, ShapeElement, TextElement } from '../../db/schema'
 import { getChildOrderIndex, getFrameForChild } from '../frame/frameLayout'
 import { extractMarkdownTitle, getCanvasPreviewLines, isMarkdownTruncated } from '../../utils/markdown'
-import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, MARKDOWN_ASPECT_RATIO, IMAGE_CAPTION_FONT_SIZE, IMAGE_CAPTION_GAP, IMAGE_CAPTION_LINE_HEIGHT, ARROW_HIT_STROKE_WIDTH } from '../../db/schema'
+import { MARKDOWN_CARD_PADDING, MARKDOWN_CARD_RADIUS, MARKDOWN_ASPECT_RATIO, IMAGE_CAPTION_FONT_SIZE, IMAGE_CAPTION_GAP, IMAGE_CAPTION_LINE_HEIGHT, ARROW_HIT_STROKE_WIDTH, FRAME_TITLE_FONT_SIZE, getFrameTitleNotchLayout } from '../../db/schema'
 import { readMediaBlob } from '../../db/assetRepo'
 import { getImageElement } from '../../utils/objectUrlCache'
 import { getImageCaptionBlockHeight } from '../../utils/imageCaption'
@@ -685,6 +685,27 @@ function FrameOrderBadge({
   )
 }
 
+function FrameTitleNotch({ frame }: { frame: FrameElement }) {
+  const layout = getFrameTitleNotchLayout(frame)
+  if (!layout) return null
+
+  return (
+    <Text
+      id={`${frame.id}-title-notch`}
+      x={layout.x}
+      y={layout.y}
+      width={layout.width}
+      text={layout.title}
+      fontSize={FRAME_TITLE_FONT_SIZE}
+      fontFamily="Inter"
+      fontStyle="bold"
+      fill={frame.titleColor ?? '#111827'}
+      align="center"
+      listening={false}
+    />
+  )
+}
+
 export function CanvasFrameElement({
   element,
   onSelect,
@@ -697,23 +718,31 @@ export function CanvasFrameElement({
   onFrameDragEnd: (dx: number, dy: number) => void
   onFrameTransformEnd: (updates: Partial<FrameElement>, prevBounds: { x: number; y: number; width: number; height: number }) => void
 }) {
-  const shapeRef = useRef<Konva.Rect>(null)
+  const shapeRef = useRef<Konva.Group>(null)
   const dragStart = useRef({ x: element.x, y: element.y })
-  const childDragStart = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const childDragStart = useRef<Map<string, { x: number; y: number } | { points: number[] }>>(new Map())
   const transformStart = useRef({ x: element.x, y: element.y, width: element.width, height: element.height })
 
   const syncChildrenDuringDrag = (dx: number, dy: number) => {
     const stage = shapeRef.current?.getStage()
     if (!stage) return
 
-    for (const childId of element.childIds) {
+    for (const childId of element.childIds ?? []) {
       const start = childDragStart.current.get(childId)
       const node = stage.findOne(`#${childId}`)
-      if (start && node) node.position({ x: start.x + dx, y: start.y + dy })
+      if (start && node && 'x' in start) node.position({ x: start.x + dx, y: start.y + dy })
 
       const badgeStart = childDragStart.current.get(`${childId}-badge`)
       const badge = stage.findOne(`#${childId}-frame-badge`)
-      if (badgeStart && badge) badge.position({ x: badgeStart.x + dx, y: badgeStart.y + dy })
+      if (badgeStart && badge && 'x' in badgeStart) {
+        badge.position({ x: badgeStart.x + dx, y: badgeStart.y + dy })
+      }
+    }
+
+    const notchStart = childDragStart.current.get('title-notch')
+    const notch = stage.findOne(`#${element.id}-title-notch`)
+    if (notchStart && notch && 'x' in notchStart) {
+      notch.position({ x: notchStart.x + dx, y: notchStart.y + dy })
     }
   }
 
@@ -722,13 +751,16 @@ export function CanvasFrameElement({
     childDragStart.current.clear()
     if (!stage) return
 
-    for (const childId of element.childIds) {
+    for (const childId of element.childIds ?? []) {
       const node = stage.findOne(`#${childId}`)
       if (node) childDragStart.current.set(childId, { x: node.x(), y: node.y() })
 
       const badge = stage.findOne(`#${childId}-frame-badge`)
       if (badge) childDragStart.current.set(`${childId}-badge`, { x: badge.x(), y: badge.y() })
     }
+
+    const notch = stage.findOne(`#${element.id}-title-notch`)
+    if (notch) childDragStart.current.set('title-notch', { x: notch.x(), y: notch.y() })
   }
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -737,17 +769,15 @@ export function CanvasFrameElement({
   }
 
   return (
-    <Rect
+    <Group
       ref={shapeRef}
       id={element.id}
       x={element.x}
       y={element.y}
       width={element.width}
       height={element.height}
-      fill={element.backgroundColor}
-      cornerRadius={element.radius}
-      opacity={element.opacity}
       rotation={element.rotation}
+      opacity={element.opacity}
       draggable={!element.locked}
       onClick={handleSelect}
       onTap={handleSelect}
@@ -792,7 +822,14 @@ export function CanvasFrameElement({
         node.scaleX(1)
         node.scaleY(1)
       }}
-    />
+    >
+      <Rect
+        width={element.width}
+        height={element.height}
+        fill={element.backgroundColor}
+        cornerRadius={element.radius}
+      />
+    </Group>
   )
 }
 
@@ -841,14 +878,17 @@ export function renderElement(
   switch (element.type) {
     case 'frame':
       return (
-        <CanvasFrameElement
-          key={element.id}
-          element={element}
-          isSelected={isSelected}
-          onSelect={handleSelect}
-          onFrameDragEnd={(dx, dy) => onFrameDragEnd?.(element.id, dx, dy)}
-          onFrameTransformEnd={(updates, prev) => onFrameTransformEnd?.(element.id, updates, prev)}
-        />
+        <>
+          <CanvasFrameElement
+            key={element.id}
+            element={element}
+            isSelected={isSelected}
+            onSelect={handleSelect}
+            onFrameDragEnd={(dx, dy) => onFrameDragEnd?.(element.id, dx, dy)}
+            onFrameTransformEnd={(updates, prev) => onFrameTransformEnd?.(element.id, updates, prev)}
+          />
+          <FrameTitleNotch frame={element} />
+        </>
       )
     case 'text':
       return wrapWithBadge(

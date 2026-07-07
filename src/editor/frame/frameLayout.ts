@@ -1,8 +1,29 @@
 import type { CanvasElement, FrameElement } from '../../db/schema'
 import { getImageCaptionBlockHeight } from '../../utils/imageCaption'
-import { getFrameAspectRatio } from '../../db/schema'
+import {
+  FRAME_DEFAULT_CONNECTOR_COLOR,
+  FRAME_DEFAULT_CONNECTOR_STROKE_WIDTH,
+  FRAME_DEFAULT_TITLE_COLOR,
+  getFrameAspectRatio,
+} from '../../db/schema'
 
 export type FrameBounds = { x: number; y: number; width: number; height: number }
+
+export function normalizeFrame(frame: FrameElement): FrameElement {
+  return {
+    ...frame,
+    childIds: frame.childIds ?? [],
+    title: frame.title ?? '',
+    titleColor: frame.titleColor ?? FRAME_DEFAULT_TITLE_COLOR,
+    showConnectors: frame.showConnectors ?? false,
+    connectorColor: frame.connectorColor ?? FRAME_DEFAULT_CONNECTOR_COLOR,
+    connectorStrokeWidth: frame.connectorStrokeWidth ?? FRAME_DEFAULT_CONNECTOR_STROKE_WIDTH,
+  }
+}
+
+export function normalizeCanvasElements(elements: CanvasElement[]): CanvasElement[] {
+  return elements.map((el) => (el.type === 'frame' ? normalizeFrame(el) : el))
+}
 
 export function isFrameElement(el: CanvasElement): el is FrameElement {
   return el.type === 'frame'
@@ -14,15 +35,16 @@ export function canBeFrameChild(el: CanvasElement): boolean {
 
 export function getFrameForChild(childId: string, elements: CanvasElement[]): FrameElement | undefined {
   return elements.find(
-    (el): el is FrameElement => el.type === 'frame' && el.childIds.includes(childId),
+    (el): el is FrameElement => el.type === 'frame' && (el.childIds ?? []).includes(childId),
   )
 }
 
 export function getChildOrderIndex(childId: string, frame: FrameElement): number {
-  return frame.childIds.indexOf(childId)
+  return (frame.childIds ?? []).indexOf(childId)
 }
 
-export function sanitizeChildIds(childIds: string[], elements: CanvasElement[]): string[] {
+export function sanitizeChildIds(childIds: string[] | undefined, elements: CanvasElement[]): string[] {
+  if (!childIds) return []
   const ids = new Set(elements.map((el) => el.id))
   return childIds.filter((id) => ids.has(id))
 }
@@ -100,8 +122,8 @@ export function removeChildFromAllFrames(
   elements: CanvasElement[],
 ): CanvasElement[] {
   return elements.map((el) => {
-    if (el.type !== 'frame' || !el.childIds.includes(childId)) return el
-    return { ...el, childIds: el.childIds.filter((id) => id !== childId) }
+    if (el.type !== 'frame' || !(el.childIds ?? []).includes(childId)) return el
+    return { ...el, childIds: (el.childIds ?? []).filter((id) => id !== childId) }
   })
 }
 
@@ -114,6 +136,7 @@ export function layoutFrameChildren(
   frame: FrameElement,
   elements: CanvasElement[],
 ): LayoutResult {
+  frame = normalizeFrame(frame)
   const childIds = sanitizeChildIds(frame.childIds, elements)
   const children = childIds
     .map((id) => elements.find((el) => el.id === id))

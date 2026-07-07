@@ -112,6 +112,11 @@ export type FrameElement = BaseElement & {
   columns: number
   childIds: string[]
   aspectRatio: number
+  title: string
+  titleColor: string
+  showConnectors: boolean
+  connectorColor: string
+  connectorStrokeWidth: number
 }
 
 export const FRAME_DEFAULT_SIZE = { width: 480, height: 360 } as const
@@ -124,6 +129,31 @@ export const FRAME_DEFAULT_GAP = 16
 export const FRAME_DEFAULT_RADIUS = 16
 export const FRAME_DEFAULT_BACKGROUND = '#FFFFFF'
 export const FRAME_MAX_CHILDREN = 24
+export const FRAME_TITLE_FONT_SIZE = 20
+export const FRAME_TITLE_FLOAT_GAP = 8
+export const FRAME_DEFAULT_TITLE_COLOR = '#111827'
+export const FRAME_DEFAULT_CONNECTOR_COLOR = '#6B7280'
+export const FRAME_DEFAULT_CONNECTOR_STROKE_WIDTH = 2
+
+export type FrameTitleNotchLayout = {
+  x: number
+  y: number
+  width: number
+  title: string
+}
+
+export function getFrameTitleNotchLayout(
+  frame: Pick<FrameElement, 'x' | 'y' | 'width' | 'title'>,
+): FrameTitleNotchLayout | null {
+  const title = (frame.title ?? '').trim()
+  if (!title) return null
+  return {
+    x: frame.x,
+    y: frame.y - FRAME_TITLE_FLOAT_GAP - FRAME_TITLE_FONT_SIZE,
+    width: frame.width,
+    title,
+  }
+}
 
 export function getFrameAspectRatio(width: number, height: number): number {
   return height > 0 ? width / height : 1

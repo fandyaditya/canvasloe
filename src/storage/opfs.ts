@@ -130,3 +130,47 @@ export async function fileExists(path: string): Promise<boolean> {
     return false
   }
 }
+
+export async function getOpfsTotalSize(path = ''): Promise<number> {
+  if (!isOpfsSupported()) return 0
+
+  const entries = await listDirectory(path)
+  let total = 0
+
+  for (const entry of entries) {
+    if (entry.kind === 'directory') {
+      total += await getOpfsTotalSize(entry.path)
+    } else {
+      const file = await readFile(entry.path)
+      total += file.size
+    }
+  }
+
+  return total
+}
+
+export async function listAllOpfsFilePaths(path = ''): Promise<string[]> {
+  if (!isOpfsSupported()) return []
+
+  const entries = await listDirectory(path)
+  const files: string[] = []
+
+  for (const entry of entries) {
+    if (entry.kind === 'directory') {
+      files.push(...(await listAllOpfsFilePaths(entry.path)))
+    } else {
+      files.push(entry.path)
+    }
+  }
+
+  return files
+}
+
+export async function clearOpfsMedia(): Promise<void> {
+  if (!isOpfsSupported()) return
+
+  const entries = await listDirectory()
+  for (const entry of entries) {
+    await deleteDirectory(entry.path)
+  }
+}

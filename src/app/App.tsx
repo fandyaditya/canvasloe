@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { EditorShell } from '../editor/EditorShell'
 import { ensureActiveCanvas } from '../db/seed'
 import { migrateToOpfs } from '../db/migrateToOpfs'
+import { purgeOrphanedOpfs } from '../db/mediaRepo'
 import { useEditorStore } from '../editor/state/editorStore'
 
 export function App() {
@@ -10,6 +11,12 @@ export function App() {
   useEffect(() => {
     void (async () => {
       await migrateToOpfs()
+      const orphaned = await purgeOrphanedOpfs()
+      if (orphaned.removedFiles > 0) {
+        console.info(
+          `[OPFS] removed ${orphaned.removedFiles} orphaned files (${orphaned.freedBytes} bytes)`,
+        )
+      }
       const activeCanvasId = await ensureActiveCanvas()
       if (activeCanvasId) {
         useEditorStore.getState().setActiveCanvasId(activeCanvasId)
